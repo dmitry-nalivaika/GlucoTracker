@@ -1,0 +1,168 @@
+"""AnalysisService — orchestrates AI analysis pipeline.
+
+Flow: completed session → AIService → persist AIAnalysis → send Telegram message
+      → fire-and-forget Miro card creation.
+
+Miro failure MUST NOT block Telegram delivery (FR-009, Constitution II).
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from typing import Any
+
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from telegram.constants import ParseMode
+
+from glucotrack.bot import formatters
+from glucotrack.models.session import Session
+from glucotrack.repositories.analysis_repository import AnalysisRepository
+from glucotrack.repositories.session_repository import SessionRepository
+from glucotrack.services.ai_service import AIService, AnalysisError
+from glucotrack.storage.local_storage import StorageRepository
+
+logger = logging.getLogger(__name__)
+
+
+class AnalysisService:
+    """Orchestrates the full analysis pipeline for a completed session."""
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        ai_service: AIService,
+        miro_service: Any,
+        storage_root: str,
+    ) -> None:
+        self._db = db
+        self._ai = ai_service
+        self._miro = miro_service
+        self._storage = StorageRepository(storage_root)
+        self._sess_repo = SessionRepository(db)
+        self._analysis_repo = AnalysisRepository(db)
+
+    async def run_analysis(
+        self,
+        user_id: int,
+        session_id: str,
+        chat_id: int,
+        bot: Any,
+    ) -> None:
+        """Run full analysis pipeline for a completed session.
+
+        Sends "Analysis in progress" ack is sent by handle_done before calling this.
+        This method delivers the final result.
+        """
+        try:
+            # Load session with all entries eagerly to avoid lazy load in async context
+            result = await self._db.execute(
+                select(Session)
+                .where(and_(Session.id == session_id, Session.user_id == user_id))
+                .options(
+                    selectinload(Session.food_entries),
+                    selectinload(Session.cgm_entries),
+                    selectinload(Session.activity_entries),
+                )
+            )
+            session = result.scalar_one_or_none()
+            if session is None:
+                logger.error("Session %s not found for user %d", session_id, user_id)
+                return
+
+            food_entries = [
+                {"telegram_file_id": e.telegram_file_id, "file_path": e.file_path}
+                for e in session.food_entries
+            ]
+            cgm_entries = [
+                {
+                    "telegram_file_id": e.telegram_file_id,
+                    "file_path": e.file_path,
+                    "timing_label": e.timing_label,
+                }
+                for e in session.cgm_entries
+            ]
+            activity_entries = [
+                {"description": e.description} for e in session.activity_entries
+            ]
+
+            # Noop file loader (photos are stored locally; in prod, download from Telegram)
+            async def load_file_bytes(telegram_file_id: str) -> bytes:
+                return b""
+
+            try:
+                result = await self._ai.analyse_session(
+                    user_id=user_id,
+                    food_entries=food_entries,
+                    cgm_entries=cgm_entries,
+                    activity_entries=activity_entries,
+                    load_file_bytes=load_file_bytes,
+                )
+            except AnalysisError as exc:
+                logger.error("Analysis failed for session %s: %s", session_id, exc)
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=formatters.fmt_analysis_error(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
+                return
+
+            # Handle CGM unparseable (FR-011)
+            if not result.get("cgm_parseable", True):
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=formatters.fmt_cgm_unparseable(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
+                return
+
+            # Persist analysis
+            analysis = await self._analysis_repo.save_analysis(
+                user_id=user_id,
+                session_id=session_id,
+                nutrition=result.get("nutrition", {}),
+                glucose_curve=result.get("glucose_curve", []),
+                correlation=result.get("correlation", {}),
+                recommendations=result.get("recommendations", []),
+                within_target_notes=result.get("target_range_note"),
+                raw_response=json.dumps(result),
+            )
+            await self._db.commit()
+
+            # Mark session as analysed
+            await self._sess_repo.mark_analysed(user_id, session_id)
+            await self._db.commit()
+
+            # Deliver result to Telegram (SC-003: within 30s of session completion)
+            await bot.send_message(
+                chat_id=chat_id,
+                text=formatters.fmt_analysis_result(analysis),
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
+
+            # Fire-and-forget Miro card creation (FR-009: Miro failure must not block)
+            if self._miro is not None:
+                asyncio.create_task(
+                    self._create_miro_card_safe(analysis, user_id)
+                )
+
+        except Exception as exc:
+            logger.exception("Unexpected error in run_analysis (session=%s): %s", session_id, exc)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=formatters.fmt_generic_error(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
+            except Exception:
+                pass
+
+    async def _create_miro_card_safe(self, analysis: Any, user_id: int) -> None:
+        """Create Miro card; log but never raise (FR-009)."""
+        try:
+            if self._miro:
+                await self._miro.create_session_card(analysis=analysis, user_id=user_id)
+        except Exception as exc:
+            logger.error("Miro card creation failed (non-blocking): %s", exc)
