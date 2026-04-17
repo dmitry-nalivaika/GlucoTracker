@@ -251,9 +251,7 @@ class SessionRepository:
         Constitution II: scoped by both session_id AND user_id.
         """
         result = await self._db.execute(
-            select(Session).where(
-                and_(Session.id == session_id, Session.user_id == user_id)
-            )
+            select(Session).where(and_(Session.id == session_id, Session.user_id == user_id))
         )
         session = result.scalar_one_or_none()
         if session is not None:

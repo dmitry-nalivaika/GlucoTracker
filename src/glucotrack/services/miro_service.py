@@ -96,7 +96,6 @@ class MiroService:
 
         return {
             "data": {"title": title, "description": description},
-            "style": {"fillColor": "#d5f5e3"},
             "position": {"x": 0, "y": 0, "origin": "center"},
             "geometry": {"width": 320, "height": 180},
         }

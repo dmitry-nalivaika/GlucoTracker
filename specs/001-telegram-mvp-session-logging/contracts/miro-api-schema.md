@@ -17,9 +17,6 @@
     "title": "GlucoTrack Session — {YYYY-MM-DD HH:MM UTC} [User #{anonymised_id}]",
     "description": "**Nutrition**: {carbs_g}g carbs, {proteins_g}g protein, {fats_g}g fat, GI ~{gi_estimate}\n\n**Glucose Response**: {glucose_curve_summary}\n\n**Correlation**: {correlation_summary}\n\n**Top Recommendation**: {top_recommendation_text}"
   },
-  "style": {
-    "fillColor": "#d5f5e3"
-  },
   "position": {
     "x": 0,
     "y": 0,
@@ -34,7 +31,7 @@
 
 **Notes**:
 - `{anonymised_id}` is a short hash of `user_id` — NEVER the raw Telegram user ID or username.
-- Card color `#d5f5e3` (light green) for session analyses.
+- `style.fillColor` is not supported by the Miro cards API v2 — omitted from payload.
 - Position is auto-placed; Miro positions sequentially if coordinates collide.
 
 ### Expected Response (201 Created)
@@ -66,9 +63,6 @@ The `id` field is stored in `miro_cards.miro_card_id`.
     "title": "GlucoTrack TREND — {period_description} [User #{anonymised_id}]",
     "description": "**Sessions analysed**: {session_count}\n\n**Stability**: {stability_trend}\n\n**Best patterns**: {stable_patterns_summary}\n\n**Top Recommendation**: {top_recommendation_text}\n\n**Target range (70–140 mg/dL)**: {target_range_note}"
   },
-  "style": {
-    "fillColor": "#d6eaf8"
-  },
   "position": {
     "x": 400,
     "y": 0,
@@ -82,8 +76,7 @@ The `id` field is stored in `miro_cards.miro_card_id`.
 ```
 
 **Notes**:
-- Card color `#d6eaf8` (light blue) distinguishes trend cards from session cards.
-- Visually distinct per spec FR-009 and User Story 3 acceptance criterion 4.
+- `style.fillColor` is not supported by the Miro cards API v2 — omitted from payload.
 
 ---
 

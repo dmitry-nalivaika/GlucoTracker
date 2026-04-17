@@ -87,8 +87,7 @@ class TestMiroService:
         assert "data" in body
         assert "title" in body["data"]
         assert "description" in body["data"]
-        assert "style" in body
-        assert body["style"]["fillColor"] == "#d5f5e3"
+        assert "style" not in body  # Miro cards API v2 does not support style.fillColor
         assert "position" in body
         assert "geometry" in body
 

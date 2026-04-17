@@ -63,7 +63,8 @@ class TestMiroAPISchemaContract:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_request_has_style_with_fill_color(self) -> None:
+    async def test_request_omits_style_field(self) -> None:
+        """Miro cards API v2 does not support style.fillColor — must not be sent."""
         service = MiroService(access_token="tok", board_id="board-1")
         analysis = _make_analysis()
         captured: dict = {}
@@ -75,7 +76,7 @@ class TestMiroAPISchemaContract:
         respx.post("https://api.miro.com/v2/boards/board-1/cards").mock(side_effect=capture)
         await service.create_session_card(analysis=analysis)
 
-        assert captured["body"]["style"]["fillColor"] == "#d5f5e3"
+        assert "style" not in captured["body"]
 
     @pytest.mark.asyncio
     @respx.mock

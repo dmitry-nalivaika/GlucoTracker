@@ -205,9 +205,7 @@ class TestAnalysisService:
                 fh.write(expected_bytes)
 
             sess_repo = SessionRepository(test_db)
-            await sess_repo.add_food_entry(
-                user_id, session_id, food_file_path, "abc12345food"
-            )
+            await sess_repo.add_food_entry(user_id, session_id, food_file_path, "abc12345food")
             await sess_repo.add_cgm_entry(
                 user_id, session_id, "users/100/sessions/x/cgm.jpg", "cgm99", "1h"
             )
