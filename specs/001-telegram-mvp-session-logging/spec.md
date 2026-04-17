@@ -1,8 +1,9 @@
 # Feature Specification: GlucoTrack Telegram MVP — Session Logging & AI Analysis
 
 **Feature Branch**: `001-telegram-mvp-session-logging`
+**GitHub Issue**: [#1 — feat(001): Telegram MVP — Session Logging & AI Analysis](https://github.com/dmitry-nalivaika/GlucoTracker/issues/1)
 **Created**: 2026-04-17
-**Status**: Draft
+**Status**: Ready for Implementation
 **Input**: User description: GlucoTrack MVP — Telegram bot input, AI session analysis, Miro board output
 
 ## User Scenarios & Testing *(mandatory)*
