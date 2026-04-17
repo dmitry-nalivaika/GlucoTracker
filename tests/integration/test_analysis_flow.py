@@ -1,16 +1,15 @@
 """Integration tests for US2 analysis pipeline — T036."""
+
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from glucotrack.repositories.analysis_repository import AnalysisRepository
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.services.analysis_service import AnalysisService
-from glucotrack.models.session import SessionStatus
-
 
 ANALYSIS_RESULT = {
     "nutrition": {"carbs_g": 50, "proteins_g": 25, "fats_g": 12, "gi_estimate": 70, "notes": ""},
@@ -18,7 +17,12 @@ ANALYSIS_RESULT = {
         {"timing_label": "before", "estimated_value_mg_dl": 90, "in_range": True, "notes": ""},
         {"timing_label": "2h after", "estimated_value_mg_dl": 130, "in_range": True, "notes": ""},
     ],
-    "correlation": {"spikes": [], "dips": [], "stable_zones": ["2h after"], "summary": "Good control"},
+    "correlation": {
+        "spikes": [],
+        "dips": [],
+        "stable_zones": ["2h after"],
+        "summary": "Good control",
+    },
     "recommendations": [{"priority": 1, "text": "Maintain current eating pattern"}],
     "target_range_note": "All readings within 70–140 mg/dL.",
     "cgm_parseable": True,
@@ -75,12 +79,12 @@ class TestAnalysisFlow:
         assert mock_bot.send_message.called
 
     @pytest.mark.asyncio
-    async def test_telegram_message_contains_four_sections(self, test_db, sample_user, sample_session):
+    async def test_telegram_message_contains_four_sections(
+        self, test_db, sample_user, sample_session
+    ):
         """Analysis message contains all 4 sections (spec acceptance criterion)."""
         sess_repo = SessionRepository(test_db)
-        await sess_repo.add_food_entry(
-            sample_user.telegram_user_id, sample_session.id, "p", "t"
-        )
+        await sess_repo.add_food_entry(sample_user.telegram_user_id, sample_session.id, "p", "t")
         await sess_repo.add_cgm_entry(
             sample_user.telegram_user_id, sample_session.id, "p2", "t2", "1h"
         )

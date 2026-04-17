@@ -5,22 +5,19 @@ Uses respx to mock the Miro API. Tests the full pipeline:
 
 Miro failure must NOT affect Telegram delivery.
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 import respx
 
-from glucotrack.repositories.analysis_repository import AnalysisRepository
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.services.analysis_service import AnalysisService
 from glucotrack.services.miro_service import MiroService
-from glucotrack.models.miro import MiroCard, MiroCardStatus
-
 
 ANALYSIS_RESULT = {
     "nutrition": {"carbs_g": 50, "proteins_g": 25, "fats_g": 12, "gi_estimate": 70, "notes": ""},
@@ -51,7 +48,7 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post(f"https://api.miro.com/v2/boards/test-board/cards").mock(
+        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
             return_value=httpx.Response(
                 201,
                 json={"id": "miro-card-001", "type": "card", "data": {}},
@@ -82,12 +79,7 @@ class TestMiroFlow:
         # Telegram was delivered
         assert mock_bot.send_message.called
 
-        # MiroCard row exists
-        from sqlalchemy import select
-        result = await test_db.execute(
-            select(MiroCard).where(MiroCard.source_id == pytest.approx(None) or True)
-        )
-        # Just check that the miro API was called (respx mock was hit)
+        # Verify the Miro API was called (respx mock was hit)
         assert respx.calls.call_count >= 1
 
     @pytest.mark.asyncio
@@ -103,7 +95,7 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post(f"https://api.miro.com/v2/boards/test-board/cards").mock(
+        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
             return_value=httpx.Response(500, json={"message": "server error"})
         )
 

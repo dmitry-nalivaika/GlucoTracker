@@ -6,6 +6,7 @@ Enforces the path pattern:
 per Constitution II: "File storage paths MUST follow the pattern
 /users/{user_id}/sessions/{session_id}/…"
 """
+
 from __future__ import annotations
 
 import logging

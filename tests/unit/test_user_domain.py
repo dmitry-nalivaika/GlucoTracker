@@ -1,11 +1,10 @@
 """Unit tests for user domain logic — T022."""
+
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
 from glucotrack.domain.user import get_or_create_user
-from glucotrack.models.user import User
 
 
 class TestGetOrCreateUser:
@@ -32,6 +31,7 @@ class TestGetOrCreateUser:
     @pytest.mark.asyncio
     async def test_updates_last_seen_at_on_each_call(self, test_db):
         import asyncio
+
         user1 = await get_or_create_user(test_db, telegram_user_id=777)
         original_last_seen = user1.last_seen_at
         await asyncio.sleep(0.01)

@@ -1,10 +1,9 @@
 """Unit tests for StorageRepository — T020."""
+
 from __future__ import annotations
 
 import os
 import tempfile
-
-import pytest
 
 from glucotrack.storage.local_storage import StorageRepository
 

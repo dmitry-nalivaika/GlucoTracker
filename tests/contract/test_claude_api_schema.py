@@ -3,6 +3,7 @@
 Validates that the request payload matches contracts/claude-api-schema.md
 and that the response JSON parses to the expected structure.
 """
+
 from __future__ import annotations
 
 import json

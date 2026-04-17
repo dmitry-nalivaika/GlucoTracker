@@ -2,6 +2,7 @@
 
 Every query must include user_id scope (Constitution II).
 """
+
 from __future__ import annotations
 
 import logging

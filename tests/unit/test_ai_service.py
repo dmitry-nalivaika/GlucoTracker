@@ -2,6 +2,7 @@
 
 Claude API calls are mocked; no real network calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from glucotrack.services.ai_service import AIService, AnalysisError, RateLimitExceeded
-
 
 VALID_ANALYSIS = {
     "nutrition": {
@@ -21,8 +21,18 @@ VALID_ANALYSIS = {
         "notes": "Pasta with tomato sauce",
     },
     "glucose_curve": [
-        {"timing_label": "before eating", "estimated_value_mg_dl": 95, "in_range": True, "notes": ""},
-        {"timing_label": "1 hour after", "estimated_value_mg_dl": 155, "in_range": False, "notes": "spike"},
+        {
+            "timing_label": "before eating",
+            "estimated_value_mg_dl": 95,
+            "in_range": True,
+            "notes": "",
+        },
+        {
+            "timing_label": "1 hour after",
+            "estimated_value_mg_dl": 155,
+            "in_range": False,
+            "notes": "spike",
+        },
     ],
     "correlation": {
         "spikes": ["Pasta caused spike at 1h"],
@@ -30,9 +40,7 @@ VALID_ANALYSIS = {
         "stable_zones": [],
         "summary": "Glucose spiked above 140 mg/dL after eating pasta.",
     },
-    "recommendations": [
-        {"priority": 1, "text": "Reduce refined carbs to lower post-meal spike."}
-    ],
+    "recommendations": [{"priority": 1, "text": "Reduce refined carbs to lower post-meal spike."}],
     "target_range_note": "One reading exceeded 140 mg/dL at 1 hour post-meal.",
     "cgm_parseable": True,
     "cgm_parse_error": None,
@@ -57,7 +65,9 @@ class TestAIService:
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
 
-        with patch.object(service._client.messages, "create", new=AsyncMock(return_value=mock_response)):
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
             result = await service.analyse_session(
                 user_id=1,
                 food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
@@ -73,11 +83,17 @@ class TestAIService:
     @pytest.mark.asyncio
     async def test_cgm_unparseable_returns_false_flag(self) -> None:
         service = _make_service()
-        unparseable = {**VALID_ANALYSIS, "cgm_parseable": False, "cgm_parse_error": "Image too blurry"}
+        unparseable = {
+            **VALID_ANALYSIS,
+            "cgm_parseable": False,
+            "cgm_parse_error": "Image too blurry",
+        }
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text=json.dumps(unparseable))]
 
-        with patch.object(service._client.messages, "create", new=AsyncMock(return_value=mock_response)):
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
             result = await service.analyse_session(
                 user_id=1,
                 food_entries=[{"telegram_file_id": "f1", "file_path": "p"}],
@@ -95,7 +111,9 @@ class TestAIService:
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
 
-        with patch.object(service._client.messages, "create", new=AsyncMock(return_value=mock_response)):
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
             await service.analyse_session(
                 user_id=1,
                 food_entries=[{"telegram_file_id": "f1", "file_path": "p"}],
@@ -119,7 +137,9 @@ class TestAIService:
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
 
-        with patch.object(service._client.messages, "create", new=AsyncMock(return_value=mock_response)):
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
             # User 1 exhausts their limit
             await service.analyse_session(
                 user_id=1,
@@ -151,7 +171,9 @@ class TestAIService:
                 await service.analyse_session(
                     user_id=1,
                     food_entries=[{"telegram_file_id": "f1", "file_path": "p"}],
-                    cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                    cgm_entries=[
+                        {"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}
+                    ],
                     activity_entries=[],
                     load_file_bytes=AsyncMock(return_value=b"fake"),
                 )

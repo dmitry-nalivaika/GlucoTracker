@@ -2,6 +2,7 @@
 
 Tests are written FIRST per TDD mandate. They must FAIL before implementation.
 """
+
 from __future__ import annotations
 
 import pytest

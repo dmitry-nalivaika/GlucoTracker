@@ -3,6 +3,7 @@
 Each entry belongs to exactly one Session. All include user_id for direct
 user scoping (Constitution II — every query must include user_id predicate).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from glucotrack.models.base import Base, new_uuid, utcnow
 
 
-class FoodEntry(Base):
+class FoodEntry(Base):  # type: ignore[misc]
     """A food photograph within a session."""
 
     __tablename__ = "food_entries"
@@ -30,13 +31,13 @@ class FoodEntry(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
-    session: Mapped["Session"] = relationship("Session", back_populates="food_entries")  # type: ignore[name-defined]
+    session: Mapped[Session] = relationship("Session", back_populates="food_entries")  # type: ignore[name-defined]
 
     def __repr__(self) -> str:
         return f"<FoodEntry id={self.id} session_id={self.session_id}>"
 
 
-class CGMEntry(Base):
+class CGMEntry(Base):  # type: ignore[misc]
     """A CGM screenshot within a session, labelled with a timing context."""
 
     __tablename__ = "cgm_entries"
@@ -53,13 +54,13 @@ class CGMEntry(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
-    session: Mapped["Session"] = relationship("Session", back_populates="cgm_entries")  # type: ignore[name-defined]
+    session: Mapped[Session] = relationship("Session", back_populates="cgm_entries")  # type: ignore[name-defined]
 
     def __repr__(self) -> str:
         return f"<CGMEntry id={self.id} timing={self.timing_label}>"
 
 
-class ActivityEntry(Base):
+class ActivityEntry(Base):  # type: ignore[misc]
     """A free-text description of physical activity within a session."""
 
     __tablename__ = "activity_entries"
@@ -74,7 +75,7 @@ class ActivityEntry(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
-    session: Mapped["Session"] = relationship("Session", back_populates="activity_entries")  # type: ignore[name-defined]
+    session: Mapped[Session] = relationship("Session", back_populates="activity_entries")  # type: ignore[name-defined]
 
     def __repr__(self) -> str:
         return f"<ActivityEntry id={self.id} session_id={self.session_id}>"

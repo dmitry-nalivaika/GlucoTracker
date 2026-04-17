@@ -1,4 +1,5 @@
 """Entry point: python -m glucotrack"""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,9 +18,9 @@ def main() -> None:
     # Ensure data directory exists
     os.makedirs("data", exist_ok=True)
 
+    from glucotrack.bot.application import create_application
     from glucotrack.config import get_settings
     from glucotrack.db import init_db
-    from glucotrack.bot.application import create_application
 
     settings = get_settings()
 

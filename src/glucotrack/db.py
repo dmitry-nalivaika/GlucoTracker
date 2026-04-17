@@ -1,9 +1,10 @@
 """Database initialisation and async session factory."""
+
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -56,13 +57,11 @@ async def close_engine() -> None:
 if __name__ == "__main__":
     """CLI: python -m glucotrack.db init"""
     import asyncio
-    import sys
     import os
+    import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "init":
-        db_url = os.environ.get(
-            "DATABASE_URL", "sqlite+aiosqlite:///./data/glucotrack.db"
-        )
+        db_url = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./data/glucotrack.db")
         os.makedirs("data", exist_ok=True)
         asyncio.run(init_db(db_url))
         print(f"Database initialised: {db_url}")

@@ -2,6 +2,7 @@
 
 All queries scoped by user_id (Constitution II).
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ import logging
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glucotrack.models.analysis import AIAnalysis, TrendAnalysis
+from glucotrack.models.analysis import AIAnalysis
 from glucotrack.models.base import new_uuid, utcnow
 
 logger = logging.getLogger(__name__)
@@ -38,10 +39,10 @@ class AnalysisRepository:
         self,
         user_id: int,
         session_id: str,
-        nutrition: dict,
-        glucose_curve: list,
-        correlation: dict,
-        recommendations: list,
+        nutrition: dict[str, object],
+        glucose_curve: list[object],
+        correlation: dict[str, object],
+        recommendations: list[object],
         within_target_notes: str | None,
         raw_response: str,
     ) -> AIAnalysis:
@@ -64,9 +65,7 @@ class AnalysisRepository:
         logger.debug("Saved analysis id=%s session_id=%s", analysis.id, session_id)
         return analysis
 
-    async def get_analysis_by_session(
-        self, user_id: int, session_id: str
-    ) -> AIAnalysis | None:
+    async def get_analysis_by_session(self, user_id: int, session_id: str) -> AIAnalysis | None:
         """Return the AIAnalysis for session_id scoped to user_id, or None."""
         result = await self._db.execute(
             select(AIAnalysis).where(
@@ -81,8 +80,6 @@ class AnalysisRepository:
     async def get_analyses_for_user(self, user_id: int) -> list[AIAnalysis]:
         """Return all analyses for user_id, ordered by creation time."""
         result = await self._db.execute(
-            select(AIAnalysis)
-            .where(AIAnalysis.user_id == user_id)
-            .order_by(AIAnalysis.created_at)
+            select(AIAnalysis).where(AIAnalysis.user_id == user_id).order_by(AIAnalysis.created_at)
         )
         return list(result.scalars().all())

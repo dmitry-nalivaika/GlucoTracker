@@ -6,6 +6,7 @@ input channels behind adapter." Miro is an output channel.
 FR-009: Miro failure MUST NOT block Telegram delivery.
 Contract: contracts/miro-api-schema.md
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,10 +65,13 @@ class MiroService:
         fats = nutrition.get("fats_g", "?")
         gi = nutrition.get("gi_estimate", "?")
 
-        glucose_summary = "; ".join(
-            f"{p['timing_label']}: {p.get('estimated_value_mg_dl', '?')} mg/dL"
-            for p in glucose_curve
-        ) or "No data"
+        glucose_summary = (
+            "; ".join(
+                f"{p['timing_label']}: {p.get('estimated_value_mg_dl', '?')} mg/dL"
+                for p in glucose_curve
+            )
+            or "No data"
+        )
 
         correlation_summary = correlation.get("summary", "")
         top_rec = recommendations[0]["text"] if recommendations else "None"
@@ -79,7 +83,7 @@ class MiroService:
             f"**Top Recommendation**: {top_rec}"
         )
 
-    def _build_payload(self, analysis: Any) -> dict:
+    def _build_payload(self, analysis: Any) -> dict[str, Any]:
         """Build the full POST body for Miro cards endpoint."""
         anon_id = self._anonymise_user_id(analysis.user_id)
         try:
@@ -122,14 +126,12 @@ class MiroService:
                 response = await client.post(url, headers=headers, json=payload)
 
                 if response.status_code == 201:
-                    data = response.json()
-                    return data["id"]
+                    data: dict[str, Any] = response.json()
+                    return str(data["id"])
 
                 if response.status_code == 429:
                     if attempt >= len(retry_delays):
-                        raise MiroError(
-                            f"Miro rate limit exceeded after {attempt} retries: 429"
-                        )
+                        raise MiroError(f"Miro rate limit exceeded after {attempt} retries: 429")
                     wait = float(response.headers.get("Retry-After", retry_delays[attempt]))
                     logger.warning(
                         "Miro 429 rate limit — retrying in %.1fs (attempt %d)",
@@ -155,9 +157,7 @@ class MiroService:
                     continue
 
                 # 4xx: fail immediately, no retry
-                raise MiroError(
-                    f"Miro API error {response.status_code}: {response.text[:200]}"
-                )
+                raise MiroError(f"Miro API error {response.status_code}: {response.text[:200]}")
 
         # Unreachable but satisfies type checker
         raise MiroError("Miro card creation failed — no successful response")

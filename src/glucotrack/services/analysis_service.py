@@ -5,6 +5,7 @@ Flow: completed session → AIService → persist AIAnalysis → send Telegram m
 
 Miro failure MUST NOT block Telegram delivery (FR-009, Constitution II).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -85,9 +86,7 @@ class AnalysisService:
                 }
                 for e in session.cgm_entries
             ]
-            activity_entries = [
-                {"description": e.description} for e in session.activity_entries
-            ]
+            activity_entries = [{"description": e.description} for e in session.activity_entries]
 
             # Noop file loader (photos are stored locally; in prod, download from Telegram)
             async def load_file_bytes(telegram_file_id: str) -> bytes:
@@ -160,9 +159,7 @@ class AnalysisService:
 
             # Fire-and-forget Miro card creation (FR-009: Miro failure must not block)
             if self._miro is not None and miro_card is not None:
-                asyncio.create_task(
-                    self._create_miro_card_safe(analysis, miro_card.id)
-                )
+                asyncio.create_task(self._create_miro_card_safe(analysis, miro_card.id))
 
         except Exception as exc:
             logger.exception("Unexpected error in run_analysis (session=%s): %s", session_id, exc)

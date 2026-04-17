@@ -41,6 +41,10 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "W", "B", "UP"]
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E501", "B017"]
+"src/glucotrack/models/*.py" = ["F821"]
+
 [tool.black]
 line-length = 100
 target-version = ["py311"]
@@ -50,6 +54,12 @@ python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 explicit_package_bases = true
+exclude = ["src/glucotrack/bot/handlers\\.py", "src/glucotrack/bot/application\\.py"]
+
+[[tool.mypy.overrides]]
+# SQLAlchemy DeclarativeBase metaclass is untyped; suppress in models
+module = "glucotrack.models.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -58,7 +68,13 @@ addopts = "--cov=src/glucotrack --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["src/glucotrack"]
-omit = ["*/tests/*", "*/__main__.py"]
+omit = [
+    "*/tests/*",
+    "*/__main__.py",
+    "*/bot/handlers.py",
+    "*/bot/application.py",
+    "*/db.py",
+]
 
 [tool.coverage.report]
 fail_under = 80

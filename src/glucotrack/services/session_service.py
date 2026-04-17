@@ -2,24 +2,25 @@
 
 Handles idle gap detection (FR-013) and session auto-expiry (FR-012).
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glucotrack.domain.session import InsufficientEntriesError, SessionStateMachine
+from glucotrack.domain.session import SessionStateMachine
 from glucotrack.domain.user import get_or_create_user
 from glucotrack.models.base import utcnow
-from glucotrack.models.session import Session, SessionStatus
+from glucotrack.models.session import Session
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.storage.local_storage import StorageRepository
 
 logger = logging.getLogger(__name__)
 
 
-class IdleGapDetected(Exception):
+class IdleGapDetected(Exception):  # noqa: N818
     """Raised when a user sends a message after idle_threshold minutes since last input."""
 
     def __init__(self, session: Session, idle_minutes: float) -> None:
@@ -74,7 +75,7 @@ class SessionService:
         now = utcnow()
         last_input = session.last_input_at
         if last_input.tzinfo is None:
-            last_input = last_input.replace(tzinfo=timezone.utc)
+            last_input = last_input.replace(tzinfo=UTC)
         idle_minutes = (now - last_input).total_seconds() / 60
         if idle_minutes > self._idle_threshold:
             raise IdleGapDetected(session, idle_minutes)
@@ -107,9 +108,7 @@ class SessionService:
         else:
             filename = f"cgm_{telegram_file_id[:8]}.{ext}"
 
-        file_path = self._storage.save_file(
-            telegram_user_id, session.id, filename, file_data
-        )
+        file_path = self._storage.save_file(telegram_user_id, session.id, filename, file_data)
 
         if entry_type == "food":
             await self._sess_repo.add_food_entry(
@@ -128,9 +127,7 @@ class SessionService:
                 timing_label=timing_label,
             )
 
-    async def handle_activity(
-        self, telegram_user_id: int, text: str
-    ) -> None:
+    async def handle_activity(self, telegram_user_id: int, text: str) -> None:
         """Record an activity description in the user's open session."""
         session, _ = await self.get_or_open_session(telegram_user_id)
         await self._sess_repo.add_activity_entry(
@@ -152,9 +149,7 @@ class SessionService:
         counts = await self._sess_repo.get_entry_counts(
             user_id=telegram_user_id, session_id=session.id
         )
-        self._sm.validate_completion(
-            food_count=counts["food"], cgm_count=counts["cgm"]
-        )
+        self._sm.validate_completion(food_count=counts["food"], cgm_count=counts["cgm"])
         return await self._sess_repo.complete_session(
             user_id=telegram_user_id, session_id=session.id
         )
@@ -164,9 +159,10 @@ class SessionService:
         session = await self._sess_repo.get_open_session(user_id=telegram_user_id)
         if session is None:
             return {"food": 0, "cgm": 0, "activity": 0}
-        return await self._sess_repo.get_entry_counts(
+        result: dict[str, int] = await self._sess_repo.get_entry_counts(
             user_id=telegram_user_id, session_id=session.id
         )
+        return result
 
     async def expire_idle_sessions(self) -> int:
         """Expire all open sessions idle beyond expiry threshold (FR-012).
@@ -178,20 +174,14 @@ class SessionService:
         idle_sessions = await self._sess_repo.get_open_sessions_idle_since(cutoff)
         count = 0
         for session in idle_sessions:
-            await self._sess_repo.expire_session(
-                user_id=session.user_id, session_id=session.id
-            )
+            await self._sess_repo.expire_session(user_id=session.user_id, session_id=session.id)
             logger.info("Expired idle session id=%s user_id=%d", session.id, session.user_id)
             count += 1
         return count
 
-    async def _try_complete_or_expire(
-        self, user_id: int, session: Session
-    ) -> None:
+    async def _try_complete_or_expire(self, user_id: int, session: Session) -> None:
         """Complete session if it has entries, otherwise expire it."""
-        counts = await self._sess_repo.get_entry_counts(
-            user_id=user_id, session_id=session.id
-        )
+        counts = await self._sess_repo.get_entry_counts(user_id=user_id, session_id=session.id)
         if counts["food"] >= 1 and counts["cgm"] >= 1:
             await self._sess_repo.complete_session(user_id=user_id, session_id=session.id)
         else:

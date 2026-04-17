@@ -1,4 +1,5 @@
 """Application configuration loaded from environment variables."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -55,15 +56,17 @@ class Settings(BaseSettings):
         default=4000, description="Max Claude output tokens per session analysis"
     )
 
-    @field_validator("telegram_bot_token", "anthropic_api_key", "miro_access_token", "miro_board_id")
+    @field_validator(
+        "telegram_bot_token", "anthropic_api_key", "miro_access_token", "miro_board_id"
+    )
     @classmethod
     def not_empty(cls, v: str, info: object) -> str:
         if not v or v.strip() == "":
-            raise ValueError(f"must not be empty")
+            raise ValueError("must not be empty")
         return v
 
 
 @lru_cache
 def get_settings() -> Settings:
     """Return cached Settings instance. Call once at startup."""
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings loads from env

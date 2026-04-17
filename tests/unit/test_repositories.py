@@ -1,9 +1,9 @@
 """Unit tests for repositories — T023."""
+
 from __future__ import annotations
 
 import pytest
 
-from glucotrack.models.base import new_uuid
 from glucotrack.models.session import SessionStatus
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.repositories.user_repository import UserRepository
@@ -35,6 +35,7 @@ class TestUserRepository:
     @pytest.mark.asyncio
     async def test_update_last_seen(self, test_db):
         import asyncio
+
         repo = UserRepository(test_db)
         user = await repo.create(telegram_user_id=100)
         original = user.last_seen_at
@@ -136,7 +137,9 @@ class TestSessionRepository:
         assert expired.expired_at is not None
 
     @pytest.mark.asyncio
-    async def test_food_entry_user_id_must_match_session(self, test_db, sample_user, sample_session):
+    async def test_food_entry_user_id_must_match_session(
+        self, test_db, sample_user, sample_session
+    ):
         """Cannot add entry to another user's session — Constitution II."""
         repo = SessionRepository(test_db)
         with pytest.raises(Exception):

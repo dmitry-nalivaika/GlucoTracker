@@ -1,4 +1,5 @@
 """Unit tests for glucotrack.config — T019."""
+
 from __future__ import annotations
 
 import pytest

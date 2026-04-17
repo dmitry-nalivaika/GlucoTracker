@@ -1,15 +1,14 @@
 """Unit tests for AnalysisService — T034."""
+
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from glucotrack.models.session import SessionStatus
 from glucotrack.repositories.analysis_repository import AnalysisRepository
 from glucotrack.services.analysis_service import AnalysisService
-
 
 VALID_ANALYSIS_RESULT = {
     "nutrition": {"carbs_g": 45, "proteins_g": 20, "fats_g": 10, "gi_estimate": 65, "notes": ""},
@@ -34,9 +33,7 @@ class TestAnalysisService:
 
         # Complete the session first, add entries
         sess_repo = SessionRepository(test_db)
-        await sess_repo.add_food_entry(
-            sample_user.telegram_user_id, sample_session.id, "p", "t1"
-        )
+        await sess_repo.add_food_entry(sample_user.telegram_user_id, sample_session.id, "p", "t1")
         await sess_repo.add_cgm_entry(
             sample_user.telegram_user_id, sample_session.id, "p2", "t2", "1h"
         )
@@ -76,9 +73,7 @@ class TestAnalysisService:
         from glucotrack.repositories.session_repository import SessionRepository
 
         sess_repo = SessionRepository(test_db)
-        await sess_repo.add_food_entry(
-            sample_user.telegram_user_id, sample_session.id, "p", "t1"
-        )
+        await sess_repo.add_food_entry(sample_user.telegram_user_id, sample_session.id, "p", "t1")
         await sess_repo.add_cgm_entry(
             sample_user.telegram_user_id, sample_session.id, "p2", "t2", "1h"
         )
@@ -106,14 +101,14 @@ class TestAnalysisService:
         assert mock_bot.send_message.called
 
     @pytest.mark.asyncio
-    async def test_cgm_unparseable_sends_guidance_message(self, test_db, sample_user, sample_session):
+    async def test_cgm_unparseable_sends_guidance_message(
+        self, test_db, sample_user, sample_session
+    ):
         """Unparseable CGM triggers graceful degradation message (FR-011)."""
         from glucotrack.repositories.session_repository import SessionRepository
 
         sess_repo = SessionRepository(test_db)
-        await sess_repo.add_food_entry(
-            sample_user.telegram_user_id, sample_session.id, "p", "t1"
-        )
+        await sess_repo.add_food_entry(sample_user.telegram_user_id, sample_session.id, "p", "t1")
         await sess_repo.add_cgm_entry(
             sample_user.telegram_user_id, sample_session.id, "p2", "t2", "1h"
         )
@@ -148,7 +143,11 @@ class TestAnalysisService:
         call_args = mock_bot.send_message.call_args
         # Message should mention re-submission
         message_text = str(call_args)
-        assert "couldn't read" in message_text.lower() or "cgm" in message_text.lower() or mock_bot.send_message.call_count >= 1
+        assert (
+            "couldn't read" in message_text.lower()
+            or "cgm" in message_text.lower()
+            or mock_bot.send_message.call_count >= 1
+        )
 
     @pytest.mark.asyncio
     async def test_analysis_failure_sends_error_message(self, test_db, sample_user, sample_session):
@@ -157,9 +156,7 @@ class TestAnalysisService:
         from glucotrack.services.ai_service import AnalysisError
 
         sess_repo = SessionRepository(test_db)
-        await sess_repo.add_food_entry(
-            sample_user.telegram_user_id, sample_session.id, "p", "t1"
-        )
+        await sess_repo.add_food_entry(sample_user.telegram_user_id, sample_session.id, "p", "t1")
         await sess_repo.add_cgm_entry(
             sample_user.telegram_user_id, sample_session.id, "p2", "t2", "1h"
         )

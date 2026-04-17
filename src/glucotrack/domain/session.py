@@ -2,6 +2,7 @@
 
 Pure Python; no SQLAlchemy or Telegram dependencies.
 """
+
 from __future__ import annotations
 
 from glucotrack.models.session import SessionStatus

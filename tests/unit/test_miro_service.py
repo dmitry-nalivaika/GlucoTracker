@@ -2,16 +2,17 @@
 
 httpx requests are mocked with respx; no real network calls.
 """
+
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
 import respx
 
-from glucotrack.services.miro_service import MiroService, MiroError
+from glucotrack.services.miro_service import MiroError, MiroService
 
 
 def _make_analysis(user_id: int = 1) -> MagicMock:
@@ -78,9 +79,7 @@ class TestMiroService:
             captured_request = request
             return httpx.Response(201, json={"id": "miro-card-xyz", "type": "card", "data": {}})
 
-        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(
-            side_effect=capture
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(side_effect=capture)
 
         await service.create_session_card(analysis=analysis)
 
@@ -107,9 +106,7 @@ class TestMiroService:
             captured_request = request
             return httpx.Response(201, json={"id": "miro-card-xyz", "type": "card", "data": {}})
 
-        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(
-            side_effect=capture
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(side_effect=capture)
 
         await service.create_session_card(analysis=analysis)
 
@@ -134,9 +131,7 @@ class TestMiroService:
             call_count += 1
             return httpx.Response(400, json={"message": "bad request"})
 
-        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(
-            side_effect=respond
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(side_effect=respond)
 
         with pytest.raises(MiroError):
             await service.create_session_card(analysis=analysis)
@@ -162,9 +157,7 @@ class TestMiroService:
             call_count += 1
             return httpx.Response(500, json={"message": "server error"})
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
-            side_effect=respond
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(side_effect=respond)
 
         with pytest.raises(MiroError):
             await service.create_session_card(analysis=analysis)
@@ -192,9 +185,7 @@ class TestMiroService:
                 return httpx.Response(429, headers={"Retry-After": "0"}, json={})
             return httpx.Response(201, json={"id": "miro-card-xyz", "type": "card", "data": {}})
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
-            side_effect=respond
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(side_effect=respond)
 
         card_id = await service.create_session_card(analysis=analysis)
         assert card_id == "miro-card-xyz"
@@ -214,9 +205,7 @@ class TestMiroService:
             captured_request = request
             return httpx.Response(201, json={"id": "miro-card-xyz", "type": "card", "data": {}})
 
-        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(
-            side_effect=capture
-        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/cards").mock(side_effect=capture)
 
         await service.create_session_card(analysis=analysis)
 

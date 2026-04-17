@@ -5,14 +5,16 @@ in a dedicated AI service module; domain code MUST NOT call Claude directly."
 
 Rate limiting and token budgeting enforce Constitution VII cost guard.
 """
+
 from __future__ import annotations
 
 import base64
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import date
-from typing import Callable
+from typing import Any
 
 import anthropic
 
@@ -63,7 +65,7 @@ class AnalysisError(Exception):
     """Raised when Claude API call fails after retries."""
 
 
-class RateLimitExceeded(Exception):
+class RateLimitExceeded(Exception):  # noqa: N818
     """Raised when a user exceeds their daily AI analysis call limit (Constitution VII)."""
 
     def __init__(self, user_id: int, limit: int) -> None:
@@ -107,11 +109,11 @@ class AIService:
     async def analyse_session(
         self,
         user_id: int,
-        food_entries: list[dict],
-        cgm_entries: list[dict],
-        activity_entries: list[dict],
-        load_file_bytes: Callable,
-    ) -> dict:
+        food_entries: list[dict[str, Any]],
+        cgm_entries: list[dict[str, Any]],
+        activity_entries: list[dict[str, Any]],
+        load_file_bytes: Callable,  # type: ignore[type-arg]
+    ) -> dict[str, Any]:
         """Analyse a session using Claude vision API.
 
         Args:
@@ -131,12 +133,12 @@ class AIService:
         self._check_rate_limit(user_id)
 
         # Build content blocks
-        content: list[dict] = []
+        content: list[dict[str, Any]] = []
 
         # Text context block
         activity_text = "; ".join(e.get("description", "") for e in activity_entries)
         cgm_labels = ", ".join(e.get("timing_label", "?") for e in cgm_entries)
-        context_text = f"Session context:"
+        context_text = "Session context:"
         if activity_text:
             context_text += f" Activity: {activity_text}."
         if cgm_labels:
@@ -170,16 +172,18 @@ class AIService:
                 model=self._model,
                 max_tokens=self._max_tokens,
                 system=SESSION_ANALYSIS_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content}],
+                messages=[{"role": "user", "content": content}],  # type: ignore[typeddict-item]
             )
             self._increment_call_count(user_id)
         except anthropic.APIStatusError as exc:
             logger.error("Claude API error (user_id=%d): %s", user_id, exc)
             raise AnalysisError(f"Claude API error: {exc}") from exc
 
-        raw_text = response.content[0].text
+        first_block = response.content[0]
+        raw_text: str = getattr(first_block, "text", "")  # TextBlock has .text; others do not
         try:
-            return json.loads(raw_text)
+            result: dict[str, Any] = json.loads(raw_text)
+            return result
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse Claude response as JSON: %s", raw_text[:200])
             raise AnalysisError("Claude response was not valid JSON.") from exc

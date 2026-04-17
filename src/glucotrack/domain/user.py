@@ -2,13 +2,13 @@
 
 All operations require user_id (Constitution II).
 """
+
 from __future__ import annotations
 
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glucotrack.models.base import utcnow
 from glucotrack.models.user import User
 from glucotrack.repositories.user_repository import UserRepository
 

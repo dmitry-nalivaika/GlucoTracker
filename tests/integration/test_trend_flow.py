@@ -3,14 +3,15 @@
 Verifies that `get_analysed_sessions_for_trend` correctly scopes by user_id
 and raises InsufficientDataError when fewer than min_count sessions exist.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from glucotrack.domain.user import get_or_create_user
+from glucotrack.models.session import SessionStatus
 from glucotrack.repositories.analysis_repository import InsufficientDataError
 from glucotrack.repositories.session_repository import SessionRepository
-from glucotrack.models.session import SessionStatus
 
 
 async def _seed_analysed_sessions(db, user_id: int, count: int) -> list:
@@ -69,9 +70,7 @@ class TestTrendFlow:
 
         repo = SessionRepository(test_db)
         with pytest.raises(InsufficientDataError) as exc_info:
-            await repo.get_analysed_sessions_for_trend(
-                user_id=user.telegram_user_id, min_count=3
-            )
+            await repo.get_analysed_sessions_for_trend(user_id=user.telegram_user_id, min_count=3)
 
         assert exc_info.value.current_count == 2
         assert exc_info.value.required_count == 3
@@ -83,8 +82,6 @@ class TestTrendFlow:
 
         repo = SessionRepository(test_db)
         with pytest.raises(InsufficientDataError) as exc_info:
-            await repo.get_analysed_sessions_for_trend(
-                user_id=user.telegram_user_id, min_count=3
-            )
+            await repo.get_analysed_sessions_for_trend(user_id=user.telegram_user_id, min_count=3)
 
         assert exc_info.value.current_count == 0

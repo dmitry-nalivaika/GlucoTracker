@@ -3,6 +3,7 @@
 ALL methods take user_id and scope queries by it (Constitution II).
 No query runs without user context.
 """
+
 from __future__ import annotations
 
 import logging
@@ -62,9 +63,7 @@ class SessionRepository:
     async def get_session(self, user_id: int, session_id: str) -> Session | None:
         """Return a specific session scoped to user_id."""
         result = await self._db.execute(
-            select(Session).where(
-                and_(Session.user_id == user_id, Session.id == session_id)
-            )
+            select(Session).where(and_(Session.user_id == user_id, Session.id == session_id))
         )
         return result.scalar_one_or_none()
 
@@ -203,9 +202,7 @@ class SessionRepository:
             "activity": len(activity_result.scalars().all()),
         }
 
-    async def get_open_sessions_idle_since(
-        self, idle_before_dt: Any
-    ) -> list[Session]:
+    async def get_open_sessions_idle_since(self, idle_before_dt: Any) -> list[Session]:
         """Return all open sessions with last_input_at before idle_before_dt.
 
         Used by the auto-expiry job (FR-012).
@@ -246,9 +243,7 @@ class SessionRepository:
 
     async def _update_last_input(self, session_id: str, ts: Any) -> None:
         """Update last_input_at on the session."""
-        result = await self._db.execute(
-            select(Session).where(Session.id == session_id)
-        )
+        result = await self._db.execute(select(Session).where(Session.id == session_id))
         session = result.scalar_one_or_none()
         if session is not None:
             session.last_input_at = ts

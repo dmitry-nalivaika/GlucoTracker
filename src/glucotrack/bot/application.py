@@ -1,4 +1,5 @@
 """PTB Application factory."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,6 @@ from telegram.ext import Application, CommandHandler
 from glucotrack.bot.handlers import (
     build_conversation_handler,
     handle_help,
-    handle_start,
 )
 from glucotrack.config import Settings
 
@@ -21,13 +21,8 @@ def create_application(settings: Settings) -> Application:
     Services are stored in bot_data and injected via context.
     """
     from glucotrack.storage.local_storage import StorageRepository
-    from glucotrack.services.session_service import SessionService
 
-    app = (
-        Application.builder()
-        .token(settings.telegram_bot_token)
-        .build()
-    )
+    app = Application.builder().token(settings.telegram_bot_token).build()
 
     # Wire services into bot_data — handlers retrieve them via context.application.bot_data
     storage = StorageRepository(settings.storage_root)

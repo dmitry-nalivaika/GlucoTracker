@@ -1,7 +1,7 @@
 """Integration tests for US1 full session logging flow — T024."""
+
 from __future__ import annotations
 
-import os
 import tempfile
 
 import pytest
@@ -9,7 +9,6 @@ import pytest
 from glucotrack.domain.user import get_or_create_user
 from glucotrack.models.session import SessionStatus
 from glucotrack.repositories.session_repository import SessionRepository
-from glucotrack.repositories.user_repository import UserRepository
 from glucotrack.storage.local_storage import StorageRepository
 
 
@@ -20,7 +19,7 @@ class TestSessionFlow:
     async def test_full_session_logging_flow(self, test_db):
         with tempfile.TemporaryDirectory() as tmpdir:
             storage = StorageRepository(tmpdir)
-            user_repo = UserRepository(test_db)
+
             sess_repo = SessionRepository(test_db)
 
             # 1. User opens (or gets) a session
@@ -81,7 +80,7 @@ class TestSessionFlow:
     @pytest.mark.asyncio
     async def test_cross_user_data_isolation(self, test_db):
         """User A's session is invisible to User B — SC-006."""
-        user_repo = UserRepository(test_db)
+
         sess_repo = SessionRepository(test_db)
 
         user_a = await get_or_create_user(test_db, telegram_user_id=1001)
@@ -96,7 +95,7 @@ class TestSessionFlow:
     @pytest.mark.asyncio
     async def test_session_accepts_inputs_in_any_order(self, test_db):
         """Inputs accepted regardless of order (spec edge case)."""
-        user_repo = UserRepository(test_db)
+
         sess_repo = SessionRepository(test_db)
         user = await get_or_create_user(test_db, telegram_user_id=55)
         session = await sess_repo.create_session(user_id=user.telegram_user_id)
@@ -128,7 +127,7 @@ class TestSessionFlow:
     @pytest.mark.asyncio
     async def test_multiple_food_photos_all_saved(self, test_db):
         """Multiple food photos in one session are all retained (spec edge case)."""
-        user_repo = UserRepository(test_db)
+
         sess_repo = SessionRepository(test_db)
         user = await get_or_create_user(test_db, telegram_user_id=77)
         session = await sess_repo.create_session(user_id=user.telegram_user_id)

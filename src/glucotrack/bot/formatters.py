@@ -3,6 +3,7 @@
 All user-facing strings are defined here — no string literals in handlers.
 Raw stack traces MUST NOT appear (Constitution V).
 """
+
 from __future__ import annotations
 
 import json
@@ -36,10 +37,7 @@ def fmt_photo_type_prompt() -> str:
 
 
 def fmt_cgm_timing_prompt() -> str:
-    return (
-        "⏱️ When was this CGM screenshot taken?\n\n"
-        "Choose a timing or type your own label:"
-    )
+    return "⏱️ When was this CGM screenshot taken?\n\n" "Choose a timing or type your own label:"
 
 
 def fmt_food_ack(description: str | None = None) -> str:
@@ -178,9 +176,7 @@ def fmt_trend_coming_soon(session_count: int) -> str:
 
 
 def fmt_generic_error() -> str:
-    return (
-        "Something went wrong\\. Please try again or use /cancel to reset your session\\."
-    )
+    return "Something went wrong\\. Please try again or use /cancel to reset your session\\."
 
 
 def fmt_help() -> str:

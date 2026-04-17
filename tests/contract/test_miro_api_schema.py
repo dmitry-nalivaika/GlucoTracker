@@ -3,6 +3,7 @@
 Validates that the request payload matches contracts/miro-api-schema.md
 and that the response JSON has the expected structure.
 """
+
 from __future__ import annotations
 
 import json

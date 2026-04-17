@@ -1,14 +1,13 @@
 """Shared pytest fixtures — T017."""
+
 from __future__ import annotations
 
-import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from glucotrack.models.base import Base
-from glucotrack.models.user import User
+from glucotrack.models.base import Base, new_uuid
 from glucotrack.models.session import Session, SessionStatus
-from glucotrack.models.base import new_uuid, utcnow
+from glucotrack.models.user import User
 
 
 @pytest_asyncio.fixture

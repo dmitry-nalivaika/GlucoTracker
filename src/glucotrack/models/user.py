@@ -3,6 +3,7 @@
 Identity is the Telegram user ID (BIGINT). Created automatically on first
 contact; no password or email in MVP.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from glucotrack.models.base import Base, utcnow
 
 
-class User(Base):
+class User(Base):  # type: ignore[misc]
     """A GlucoTrack user identified by their Telegram user ID."""
 
     __tablename__ = "users"
@@ -27,7 +28,7 @@ class User(Base):
     )
 
     # Relationships
-    sessions: Mapped[list["Session"]] = relationship(  # type: ignore[name-defined]
+    sessions: Mapped[list[Session]] = relationship(  # type: ignore[name-defined]
         "Session", back_populates="user", cascade="all, delete-orphan"
     )
 

@@ -3,6 +3,7 @@
 Both models are required from day one so the data model supports trend
 analysis from the first session (spec Assumptions, FR-014).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from glucotrack.models.base import Base, new_uuid, utcnow
 
 
-class AIAnalysis(Base):
+class AIAnalysis(Base):  # type: ignore[misc]
     """The structured result of analysing a single session with Claude."""
 
     __tablename__ = "ai_analyses"
@@ -36,8 +37,8 @@ class AIAnalysis(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
-    session: Mapped["Session"] = relationship("Session", back_populates="analysis")  # type: ignore[name-defined]
-    miro_card: Mapped["MiroCard | None"] = relationship(  # type: ignore[name-defined]
+    session: Mapped[Session] = relationship("Session", back_populates="analysis")  # type: ignore[name-defined]
+    miro_card: Mapped[MiroCard | None] = relationship(  # type: ignore[name-defined]
         "MiroCard",
         primaryjoin="and_(MiroCard.source_id == AIAnalysis.id, MiroCard.source_type == 'analysis')",
         foreign_keys="[MiroCard.source_id]",
@@ -49,7 +50,7 @@ class AIAnalysis(Base):
         return f"<AIAnalysis id={self.id} session_id={self.session_id}>"
 
 
-class TrendAnalysis(Base):
+class TrendAnalysis(Base):  # type: ignore[misc]
     """Cross-session analysis result covering a user's historical sessions.
 
     Required in data model from day one (spec Assumptions, FR-014).

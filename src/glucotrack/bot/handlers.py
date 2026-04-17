@@ -3,12 +3,14 @@
 All handlers respond within 2 seconds (SC-002) by sending an immediate
 acknowledgement before any slow I/O. Analysis is triggered as a background task.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING
 
 from telegram import (
     InlineKeyboardButton,
@@ -32,7 +34,6 @@ from glucotrack.domain.session import InsufficientEntriesError
 from glucotrack.repositories.analysis_repository import InsufficientDataError
 
 if TYPE_CHECKING:
-    from glucotrack.config import Settings
     from glucotrack.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ def _disambiguate_keyboard() -> ReplyKeyboardMarkup:
 @asynccontextmanager
 async def _session_service(
     context: ContextTypes.DEFAULT_TYPE,
-) -> AsyncGenerator["SessionService", None]:
+) -> AsyncGenerator[SessionService, None]:
     """Async context manager yielding a per-request SessionService with its own DB session."""
     from glucotrack.db import get_session
     from glucotrack.services.session_service import SessionService
@@ -134,9 +135,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     assert update.message
-    await update.message.reply_text(
-        formatters.fmt_help(), parse_mode=ParseMode.MARKDOWN_V2
-    )
+    await update.message.reply_text(formatters.fmt_help(), parse_mode=ParseMode.MARKDOWN_V2)
     return SESSION_OPEN
 
 
@@ -161,7 +160,6 @@ async def handle_new_session(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle incoming photo — prompt user to classify it."""
     assert update.effective_user and update.message
-    service = _get_service(context)
 
     # Store file_id in user_data for later use
     photo = update.message.photo[-1] if update.message.photo else None
@@ -202,15 +200,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return SESSION_OPEN
 
 
-async def handle_photo_type_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> int:
+async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle inline keyboard choice: food / cgm / unsure."""
     assert update.callback_query and update.effective_user
     query = update.callback_query
     await query.answer()
 
-    service = _get_service(context)
     user_id = update.effective_user.id
     file_id = context.user_data.get("pending_file_id", "")
 
@@ -230,16 +225,17 @@ async def handle_photo_type_callback(
 
         async with _session_service(context) as service:
             if query.data == _FOOD:
-                await service.handle_photo(
-                    user_id, bytes(file_bytes), file_id, entry_type="food"
-                )
+                await service.handle_photo(user_id, bytes(file_bytes), file_id, entry_type="food")
                 await query.edit_message_text(
                     formatters.fmt_food_ack(), parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:  # _NOT_SURE
                 await service.handle_photo(
-                    user_id, bytes(file_bytes), file_id, entry_type="food",
-                    description="[unclassified — user unsure]"
+                    user_id,
+                    bytes(file_bytes),
+                    file_id,
+                    entry_type="food",
+                    description="[unclassified — user unsure]",
                 )
                 await query.edit_message_text(
                     "✅ Image saved\\. You can clarify its type when you use /done\\.",
@@ -255,9 +251,7 @@ async def handle_photo_type_callback(
     return SESSION_OPEN
 
 
-async def handle_cgm_timing_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> int:
+async def handle_cgm_timing_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle CGM timing selection."""
     assert update.callback_query and update.effective_user
     query = update.callback_query
@@ -274,21 +268,19 @@ async def handle_cgm_timing_callback(
     return await _save_cgm(update, context, timing_label)
 
 
-async def handle_cgm_custom_timing(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> int:
+async def handle_cgm_custom_timing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle free-text CGM timing label."""
     assert update.message and update.effective_user
     timing_label = (update.message.text or "").strip()[:100]
     if not timing_label:
-        await update.message.reply_text("Please provide a timing label\\.", parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(
+            "Please provide a timing label\\.", parse_mode=ParseMode.MARKDOWN_V2
+        )
         return CGM_CUSTOM_TIMING
     return await _save_cgm(update, context, timing_label)
 
 
-async def _save_cgm(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, timing_label: str
-) -> int:
+async def _save_cgm(update: Update, context: ContextTypes.DEFAULT_TYPE, timing_label: str) -> int:
     """Save CGM entry and acknowledge."""
     assert update.effective_user
     user_id = update.effective_user.id
@@ -317,12 +309,9 @@ async def _save_cgm(
     return SESSION_OPEN
 
 
-async def handle_activity_text(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> int:
+async def handle_activity_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle plain text messages as activity descriptions."""
     assert update.message and update.effective_user and update.message.text
-    service = _get_service(context)
     text = update.message.text.strip()
 
     # Ignore command-like text
@@ -346,7 +335,6 @@ async def handle_activity_text(
 async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /done — complete session and fire background analysis."""
     assert update.effective_user and update.message
-    service = _get_service(context)
     analysis_service = _get_analysis_service(context)
     user_id = update.effective_user.id
 
@@ -450,7 +438,6 @@ async def handle_trend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle user's response to idle-gap disambiguation prompt (FR-013)."""
     assert update.message and update.effective_user and update.message.text
-    service = _get_service(context)
     choice = update.message.text.strip().lower()
 
     if "new" in choice:

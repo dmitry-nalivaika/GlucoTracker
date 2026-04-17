@@ -3,6 +3,7 @@
 A read-only visualisation artefact created from an AIAnalysis or TrendAnalysis.
 References the source but is not the source of truth.
 """
+
 from __future__ import annotations
 
 import enum
@@ -14,18 +15,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 from glucotrack.models.base import Base, new_uuid, utcnow
 
 
-class MiroCardSourceType(str, enum.Enum):
+class MiroCardSourceType(enum.StrEnum):
     ANALYSIS = "analysis"
     TREND = "trend"
 
 
-class MiroCardStatus(str, enum.Enum):
+class MiroCardStatus(enum.StrEnum):
     PENDING = "pending"
     CREATED = "created"
     FAILED = "failed"
 
 
-class MiroCard(Base):
+class MiroCard(Base):  # type: ignore[misc]
     """Record of a card created (or attempted) on the Miro board."""
 
     __tablename__ = "miro_cards"
@@ -50,6 +51,4 @@ class MiroCard(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<MiroCard id={self.id} source_type={self.source_type} status={self.status}>"
-        )
+        return f"<MiroCard id={self.id} source_type={self.source_type} status={self.status}>"
