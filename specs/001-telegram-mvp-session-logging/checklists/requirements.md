@@ -31,4 +31,9 @@
 
 ## Notes
 
-- All items resolved. Spec is ready for `/speckit-clarify` or `/speckit-plan`.
+- All items resolved. Spec updated to include:
+  - P4 trend analysis user story (US4) with acceptance scenarios
+  - Glucose target range (70–140 mg/dL) embedded in FR-007, FR-016, and SC-008
+  - Data sharing explicitly scoped out in Assumptions
+  - TrendAnalysis entity added to Key Entities
+- Spec is ready for `/speckit-clarify` or `/speckit-plan`.

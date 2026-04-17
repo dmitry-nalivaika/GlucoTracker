@@ -114,6 +114,44 @@ output delivered in Telegram.
 
 ---
 
+### User Story 4 — Cross-Session Trend Analysis (Priority: P4 — MVP, deferred sprint)
+
+After a user has logged several sessions over multiple days, they can request a trend
+summary from the Telegram bot. The system analyses their accumulated session history and
+delivers a personalised report highlighting what is improving, what is worsening, and
+what consistent patterns exist in their glucose response to food and activity choices.
+
+**Why this priority**: Trend analysis is explicitly part of the product vision and
+transforms GlucoTrack from a session logger into a long-term health companion. It is
+deferred within the MVP (requires accumulated data) but must be designed for from the
+start — the data model and storage must support it.
+
+**Independent Test**: Can be tested by seeding a test user with 5+ historical sessions
+and verifying the trend report references data across multiple sessions, identifies at
+least one positive and one negative pattern, and relates them to the 70–140 mg/dL
+target range.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user has at least 3 completed and analysed sessions, **When** they request
+   a trend summary, **Then** the bot delivers a report covering: overall glucose stability
+   trend, foods/activities correlated with staying within the 70–140 mg/dL target range,
+   and foods/activities correlated with spikes or dips outside the target range.
+2. **Given** a trend report is delivered, **When** the user reviews it, **Then** the
+   report references the historical time period it covers (e.g. "based on your last 7
+   days") and the number of sessions analysed.
+3. **Given** a user has fewer than 3 analysed sessions, **When** they request a trend
+   summary, **Then** the bot informs them how many more sessions are needed before trends
+   can be meaningfully identified — it does not generate a report from insufficient data.
+4. **Given** a trend report is generated, **When** it is delivered, **Then** it includes
+   at least one specific, actionable recommendation (e.g. "your glucose stays most stable
+   after meals with X — consider prioritising those").
+5. **Given** a trend report is generated, **When** the Miro board is updated, **Then** a
+   dedicated trend card is posted alongside the session cards, visually distinct and
+   dated.
+
+---
+
 ### Edge Cases
 
 - What happens when a user sends a photo that is not a food photo or a CGM screenshot
@@ -146,8 +184,11 @@ output delivered in Telegram.
 - **FR-006**: The system MUST store all session inputs (photos, screenshots, text) in
   user-namespaced storage paths following the pattern `/users/{user_id}/sessions/{session_id}/`.
 - **FR-007**: The system MUST send the completed session to an AI analysis pipeline that
-  produces: nutritional estimation, glucose curve summary, food-glucose correlation, and
-  personalised recommendations.
+  produces: nutritional estimation (carbohydrates, proteins, fats, glycaemic index),
+  glucose curve summary (values and timing extracted from CGM screenshots), food-glucose
+  correlation (spikes, dips, stable zones), and personalised recommendations. All analysis
+  MUST evaluate glucose values against the healthy target range of **70–140 mg/dL** and
+  explicitly note when the user's readings exceeded or fell below that range.
 - **FR-008**: The system MUST deliver the AI analysis result to the user as a structured
   Telegram message with clearly separated sections.
 - **FR-009**: The system MUST post a summary card to a pre-configured Miro board after
@@ -158,6 +199,15 @@ output delivered in Telegram.
   the user and preserving session data for re-submission.
 - **FR-012**: The system MUST auto-expire incomplete (abandoned) sessions after an idle
   period to prevent orphaned data accumulation.
+- **FR-014**: The system MUST persist all session and analysis data in a queryable form
+  so that cross-session trend analysis can be performed. Data retention MUST cover at
+  minimum the last 90 days of a user's sessions.
+- **FR-015**: When a user requests a trend summary (via a bot command), the system MUST
+  retrieve that user's historical analysed sessions, run a trend analysis, and deliver a
+  structured report as defined in User Story 4. A minimum of 3 analysed sessions is
+  required; the system MUST NOT generate a trend report with fewer.
+- **FR-016**: The trend analysis MUST reference the 70–140 mg/dL target range explicitly
+  in identifying patterns of stability, spikes, and dips across sessions.
 - **FR-013**: When a user sends a message after a gap of more than a configurable idle
   threshold (default: 30 minutes) since their last input, the bot MUST ask the user
   whether they want to continue the existing open session or start a new one. The user's
@@ -176,8 +226,11 @@ output delivered in Telegram.
 - **ActivityEntry**: A free-text description of physical activity within a session.
 - **AIAnalysis**: The structured result of analysing a session. Contains: nutrition estimate,
   glucose curve data, correlation insights, recommendations. Belongs to exactly one session.
-- **MiroCard**: A read-only visualisation artefact created from an AIAnalysis. References
-  the session but is not the source of truth.
+- **MiroCard**: A read-only visualisation artefact created from an AIAnalysis or a
+  TrendAnalysis. References the source but is not the source of truth.
+- **TrendAnalysis**: A cross-session analysis result covering a user's historical
+  sessions. Contains: time period covered, session count, patterns within/outside the
+  70–140 mg/dL range, and actionable recommendations. Belongs to one user.
 
 ## Success Criteria *(mandatory)*
 
@@ -197,6 +250,11 @@ output delivered in Telegram.
   empty or permission-denied results.
 - **SC-007**: The system remains within the $50/month cost cap at a usage volume of up to
   50 session analyses per day.
+- **SC-008**: A user with 5 or more analysed sessions can receive a trend report that
+  references the 70–140 mg/dL target range and names at least one food or activity
+  pattern correlated with staying within or outside that range.
+- **SC-009**: All session and analysis data is retained and queryable for at least 90 days,
+  enabling retrospective trend analysis without data loss.
 
 ## Assumptions
 
@@ -217,4 +275,11 @@ output delivered in Telegram.
 - Sessions involving only activity entries (no food photo) are out of scope for MVP —
   at least one food photo is required for a valid, analysable session.
 - Physical activity is optional within a session; its absence does not prevent analysis.
+- **Data sharing is out of scope for this feature.** The architecture supports it
+  (ACL-based sharing model per the constitution) but no sharing UI, sharing commands, or
+  access control UI will be built in this feature. A separate feature will implement
+  sharing with nutritionists, family members, and groups. All data defaults to private.
+- Trend analysis (User Story 4 / FR-014–016) is included in this spec but deferred to a
+  later sprint within the MVP. The data model and storage MUST be designed to support it
+  from the start; the trend analysis command need not be functional in the first release.
 
