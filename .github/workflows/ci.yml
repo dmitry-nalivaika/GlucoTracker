@@ -142,7 +142,7 @@ jobs:
       - name: Run integration tests
         run: |
           if [ -d "tests/integration" ]; then
-            pytest tests/integration/ -v
+            pytest tests/integration/ -v --no-cov
           else
             echo "::notice::No tests/integration/ directory found — skipping integration tests"
           fi
@@ -172,7 +172,7 @@ jobs:
       - name: Run contract tests
         run: |
           if [ -d "tests/contract" ]; then
-            pytest tests/contract/ -v
+            pytest tests/contract/ -v --no-cov
           else
             echo "::notice::No tests/contract/ directory found — skipping contract tests"
           fi
