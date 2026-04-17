@@ -97,7 +97,7 @@ class SessionRepository:
             created_at=now,
         )
         self._db.add(entry)
-        await self._update_last_input(session_id, now)
+        await self._update_last_input(session_id, user_id, now)
         await self._db.flush()
         await self._db.refresh(entry)
         return entry
@@ -123,7 +123,7 @@ class SessionRepository:
             created_at=now,
         )
         self._db.add(entry)
-        await self._update_last_input(session_id, now)
+        await self._update_last_input(session_id, user_id, now)
         await self._db.flush()
         await self._db.refresh(entry)
         return entry
@@ -145,7 +145,7 @@ class SessionRepository:
             created_at=now,
         )
         self._db.add(entry)
-        await self._update_last_input(session_id, now)
+        await self._update_last_input(session_id, user_id, now)
         await self._db.flush()
         await self._db.refresh(entry)
         return entry
@@ -202,11 +202,15 @@ class SessionRepository:
             "activity": len(activity_result.scalars().all()),
         }
 
-    async def get_open_sessions_idle_since(self, idle_before_dt: Any) -> list[Session]:
-        """Return all open sessions with last_input_at before idle_before_dt.
+    async def _get_sessions_for_expiry_job(self, idle_before_dt: Any) -> list[Session]:
+        """Return all open sessions idle before idle_before_dt.
 
-        Used by the auto-expiry job (FR-012).
-        Note: No user_id scoping — this is an admin/background operation only.
+        ADMIN/SYSTEM USE ONLY — called exclusively by SessionService.expire_idle_sessions().
+        This query is intentionally cross-user: the background expiry job must inspect all
+        users' sessions to enforce FR-012. Each returned session is subsequently processed
+        with its own session.user_id (see SessionService.expire_idle_sessions).
+
+        Constitution II exemption tracked in GitHub issue #N — admin-operation exception.
         """
         result = await self._db.execute(
             select(Session).where(
@@ -241,9 +245,16 @@ class SessionRepository:
             raise InsufficientDataError(current_count=len(sessions), required_count=min_count)
         return sessions
 
-    async def _update_last_input(self, session_id: str, ts: Any) -> None:
-        """Update last_input_at on the session."""
-        result = await self._db.execute(select(Session).where(Session.id == session_id))
+    async def _update_last_input(self, session_id: str, user_id: int, ts: Any) -> None:
+        """Update last_input_at on the session.
+
+        Constitution II: scoped by both session_id AND user_id.
+        """
+        result = await self._db.execute(
+            select(Session).where(
+                and_(Session.id == session_id, Session.user_id == user_id)
+            )
+        )
         session = result.scalar_one_or_none()
         if session is not None:
             session.last_input_at = ts

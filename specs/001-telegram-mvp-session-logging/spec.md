@@ -213,9 +213,15 @@ target range.
   threshold (default: 30 minutes) since their last input, the bot MUST ask the user
   whether they want to continue the existing open session or start a new one. The user's
   explicit choice determines whether the new input is appended to the existing session or
-  opens a fresh session. If the user does not respond to the disambiguation prompt within
-  2 hours, the existing session MUST be automatically closed and queued for analysis, and
-  the new message begins a fresh session.
+  opens a fresh session.
+
+  > **MVP DEFERRAL — 2-hour disambiguation timeout**: The requirement that the bot
+  > automatically closes an unanswered disambiguation prompt after 2 hours is deferred
+  > to a follow-up iteration. Rationale: scheduling per-user timeout tasks requires a
+  > persistent job queue (APScheduler or Celery) that is out of scope for the Telegram
+  > MVP. Sessions that receive no reply to the disambiguation prompt remain open and will
+  > be cleaned up by the existing 24-hour idle expiry job (FR-012). Tracked in GitHub
+  > issue #3.
 
 ### Key Entities
 

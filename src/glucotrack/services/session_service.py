@@ -171,7 +171,7 @@ class SessionService:
             Number of sessions expired.
         """
         cutoff = utcnow() - timedelta(hours=self._idle_expiry_hours)
-        idle_sessions = await self._sess_repo.get_open_sessions_idle_since(cutoff)
+        idle_sessions = await self._sess_repo._get_sessions_for_expiry_job(cutoff)
         count = 0
         for session in idle_sessions:
             await self._sess_repo.expire_session(user_id=session.user_id, session_id=session.id)

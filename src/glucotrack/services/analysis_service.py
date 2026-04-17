@@ -88,9 +88,24 @@ class AnalysisService:
             ]
             activity_entries = [{"description": e.description} for e in session.activity_entries]
 
-            # Noop file loader (photos are stored locally; in prod, download from Telegram)
+            # Build lookup: telegram_file_id → relative file path
+            _file_lookup = {
+                e["telegram_file_id"]: e["file_path"] for e in food_entries + cgm_entries
+            }
+
             async def load_file_bytes(telegram_file_id: str) -> bytes:
-                return b""
+                file_path = _file_lookup.get(telegram_file_id, "")
+                if not file_path:
+                    return b""
+                try:
+                    return self._storage.load_file(file_path)
+                except (FileNotFoundError, OSError):
+                    logger.warning(
+                        "File not found: telegram_file_id=%s path=%s",
+                        telegram_file_id,
+                        file_path,
+                    )
+                    return b""
 
             try:
                 result = await self._ai.analyse_session(

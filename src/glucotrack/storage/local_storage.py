@@ -58,6 +58,22 @@ class StorageRepository:
         """Return the absolute path for a relative storage path."""
         return os.path.join(self._root, relative_path)
 
+    def load_file(self, relative_path: str) -> bytes:
+        """Read and return the raw bytes stored at relative_path.
+
+        Args:
+            relative_path: Path relative to storage_root (as returned by save_file).
+
+        Returns:
+            Raw file bytes.
+
+        Raises:
+            FileNotFoundError: If the file does not exist at that path.
+        """
+        abs_path = self.get_abs_path(relative_path)
+        with open(abs_path, "rb") as fh:
+            return fh.read()
+
     def file_exists(self, relative_path: str) -> bool:
         """Return True if the file exists at the given relative path."""
         return os.path.isfile(self.get_abs_path(relative_path))

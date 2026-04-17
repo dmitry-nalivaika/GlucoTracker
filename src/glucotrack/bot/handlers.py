@@ -436,7 +436,14 @@ async def handle_trend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle user's response to idle-gap disambiguation prompt (FR-013)."""
+    """Handle user's response to idle-gap disambiguation prompt (FR-013).
+
+    NOTE: The 2-hour auto-close for unanswered disambiguation prompts (FR-013) is
+    deferred to a follow-up iteration — it requires a persistent scheduler (APScheduler
+    or Celery) out of scope for the MVP. Unanswered prompts are handled by the 24-hour
+    idle expiry job instead. See specs/001-telegram-mvp-session-logging/spec.md and
+    GitHub issue #3.
+    """
     assert update.message and update.effective_user and update.message.text
     choice = update.message.text.strip().lower()
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from unittest.mock import AsyncMock
 
 import pytest
@@ -183,3 +185,63 @@ class TestAnalysisService:
         )
 
         assert mock_bot.send_message.called
+
+    @pytest.mark.asyncio
+    async def test_load_file_bytes_reads_real_content(self, test_db, sample_user, sample_session):
+        """load_file_bytes closure reads actual bytes from StorageRepository (BLOCKER 3)."""
+        from glucotrack.repositories.session_repository import SessionRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write a real file into the storage layout
+            user_id = sample_user.telegram_user_id
+            session_id = sample_session.id
+            food_file_path = os.path.join(
+                "users", str(user_id), "sessions", session_id, "food_abc12345.jpg"
+            )
+            abs_path = os.path.join(tmpdir, food_file_path)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            expected_bytes = b"\xff\xd8\xff\xe0real_food_image_bytes"
+            with open(abs_path, "wb") as fh:
+                fh.write(expected_bytes)
+
+            sess_repo = SessionRepository(test_db)
+            await sess_repo.add_food_entry(
+                user_id, session_id, food_file_path, "abc12345food"
+            )
+            await sess_repo.add_cgm_entry(
+                user_id, session_id, "users/100/sessions/x/cgm.jpg", "cgm99", "1h"
+            )
+            await sess_repo.complete_session(user_id, session_id)
+
+            captured: dict[str, object] = {}
+
+            async def capturing_analyse_session(**kwargs: object) -> dict:
+                captured.update(kwargs)
+                return VALID_ANALYSIS_RESULT
+
+            mock_ai = AsyncMock()
+            mock_ai.analyse_session = capturing_analyse_session
+            mock_bot = AsyncMock()
+
+            service = AnalysisService(
+                db=test_db,
+                ai_service=mock_ai,
+                miro_service=None,
+                storage_root=tmpdir,
+            )
+
+            await service.run_analysis(
+                user_id=user_id,
+                session_id=session_id,
+                chat_id=12345,
+                bot=mock_bot,
+            )
+
+            assert "load_file_bytes" in captured
+            load_fn = captured["load_file_bytes"]
+            result = await load_fn("abc12345food")
+            assert result == expected_bytes
+
+            # Missing file_id returns empty bytes gracefully
+            missing = await load_fn("nonexistent_id")
+            assert missing == b""
