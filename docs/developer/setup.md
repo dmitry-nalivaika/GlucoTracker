@@ -12,7 +12,7 @@
 ```bash
 git clone <repo-url>
 cd GlucoTrack
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate        # macOS/Linux
 # .venv\Scripts\activate         # Windows
 ```
