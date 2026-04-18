@@ -89,8 +89,8 @@ class AnalysisService:
             activity_entries = [{"description": e.description} for e in session.activity_entries]
 
             # Build lookup: telegram_file_id → relative file path
-            _file_lookup = {
-                e["telegram_file_id"]: e["file_path"] for e in food_entries + cgm_entries
+            _file_lookup: dict[str, str] = {
+                str(e["telegram_file_id"]): str(e["file_path"]) for e in food_entries + cgm_entries
             }
 
             async def load_file_bytes(telegram_file_id: str) -> bytes:
@@ -98,7 +98,8 @@ class AnalysisService:
                 if not file_path:
                     return b""
                 try:
-                    return self._storage.load_file(file_path)
+                    data: bytes = self._storage.load_file(file_path)
+                    return data
                 except (FileNotFoundError, OSError):
                     logger.warning(
                         "File not found: telegram_file_id=%s path=%s",

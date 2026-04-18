@@ -11,9 +11,12 @@ from glucotrack.config import Settings
 class TestSettings:
     """Tests for Settings pydantic model."""
 
-    def _base_env(self) -> dict[str, str]:
-        # pydantic-settings v2: direct init kwargs use field names (lowercase)
+    def _base_env(self) -> dict[str, object]:
+        # pydantic-settings v2: direct init kwargs use field names (lowercase).
+        # _env_file=None prevents tests from picking up values from the local .env
+        # file, making tests independent of the developer's local credentials.
         return {
+            "_env_file": None,
             "telegram_bot_token": "test_token",
             "anthropic_api_key": "test_key",
             "miro_access_token": "test_miro",
