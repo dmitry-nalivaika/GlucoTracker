@@ -46,25 +46,29 @@ class TestSettings:
         assert isinstance(s.ai_max_calls_per_user_per_day, int)
         assert isinstance(s.ai_max_tokens_per_session, int)
 
-    def test_missing_telegram_token_raises(self) -> None:
+    def test_missing_telegram_token_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
         env = self._base_env()
         del env["telegram_bot_token"]
         with pytest.raises(ValidationError):
             Settings(**env)  # type: ignore[arg-type]
 
-    def test_missing_anthropic_key_raises(self) -> None:
+    def test_missing_anthropic_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         env = self._base_env()
         del env["anthropic_api_key"]
         with pytest.raises(ValidationError):
             Settings(**env)  # type: ignore[arg-type]
 
-    def test_missing_miro_token_raises(self) -> None:
+    def test_missing_miro_token_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MIRO_ACCESS_TOKEN", raising=False)
         env = self._base_env()
         del env["miro_access_token"]
         with pytest.raises(ValidationError):
             Settings(**env)  # type: ignore[arg-type]
 
-    def test_missing_miro_board_raises(self) -> None:
+    def test_missing_miro_board_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MIRO_BOARD_ID", raising=False)
         env = self._base_env()
         del env["miro_board_id"]
         with pytest.raises(ValidationError):
