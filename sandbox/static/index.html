@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlucoTrack Sandbox</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; }
+
+    /* Step card states */
+    .step-card { transition: all 0.25s ease; }
+    .step-pending { background: #f8fafc; border: 2px solid #e2e8f0; }
+    .step-running { background: #eff6ff; border: 2px solid #3b82f6; animation: pulse-border 1s infinite; }
+    .step-success { background: #f0fdf4; border: 2px solid #22c55e; }
+    .step-error   { background: #fef2f2; border: 2px solid #ef4444; }
+
+    @keyframes pulse-border {
+      0%, 100% { border-color: #3b82f6; }
+      50%       { border-color: #93c5fd; }
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid #93c5fd;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Event log entries */
+    .ev-step_start    { border-left: 3px solid #94a3b8; }
+    .ev-step_success  { border-left: 3px solid #22c55e; }
+    .ev-step_error    { border-left: 3px solid #ef4444; }
+    .ev-db_request    { border-left: 3px solid #a78bfa; }
+    .ev-db_response   { border-left: 3px solid #8b5cf6; }
+    .ev-api_request   { border-left: 3px solid #fb923c; }
+    .ev-api_response  { border-left: 3px solid #f97316; }
+    .ev-telegram_message { border-left: 3px solid #38bdf8; }
+    .ev-info          { border-left: 3px solid #94a3b8; }
+    .ev-config_error  { border-left: 3px solid #ef4444; background: #fef2f2; }
+    .ev-workflow_error { border-left: 3px solid #ef4444; background: #fef2f2; }
+
+    /* Toggle switch */
+    .toggle-btn {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle-active   { background: #1e40af; color: white; }
+    .toggle-inactive { background: #e2e8f0; color: #64748b; }
+
+    /* Arrow connector */
+    .step-arrow { color: #94a3b8; text-align: center; font-size: 1.1rem; margin: 2px 0; }
+
+    /* Collapsible JSON */
+    .json-toggle { cursor: pointer; user-select: none; }
+    .json-content { font-size: 0.7rem; white-space: pre-wrap; word-break: break-all; }
+
+    /* Analysis summary */
+    .summary-card { background: #f0fdf4; border: 2px solid #86efac; border-radius: 8px; padding: 12px; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+    <div class="flex items-center gap-2">
+      <span class="text-xl">🔬</span>
+      <span class="font-bold text-gray-900 text-lg">GlucoTrack Sandbox</span>
+      <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">Developer Tool</span>
+    </div>
+    <p class="text-sm text-gray-500 ml-4">Visual workflow inspector — toggle mock/real components and watch requests flow</p>
+    <div id="ws-status" class="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
+      <span id="ws-dot" class="inline-block w-2 h-2 rounded-full bg-gray-300"></span>
+      <span id="ws-label">Connecting…</span>
+    </div>
+  </header>
+
+  <!-- Main layout -->
+  <div class="flex h-[calc(100vh-56px)] gap-0">
+
+    <!-- ── Left Panel: Controls ──────────────────────────────────── -->
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col p-4 gap-4 overflow-y-auto flex-shrink-0">
+
+      <div>
+        <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Components</h2>
+
+        <!-- Claude AI -->
+        <div class="rounded-lg border border-gray-200 p-3 mb-3">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">🤖</span>
+            <span class="text-sm font-semibold text-gray-800">Claude AI</span>
+            <span id="ai-cred-badge" class="ml-auto text-xs hidden"></span>
+          </div>
+          <p class="text-xs text-gray-500 mb-2">Analyses food + CGM data</p>
+          <div class="flex gap-1">
+            <button id="ai-mock-btn" class="toggle-btn toggle-active" onclick="setMode('ai','mock')">Mock</button>
+            <button id="ai-real-btn" class="toggle-btn toggle-inactive" onclick="setMode('ai','real')">Real API</button>
+          </div>
+          <p id="ai-note" class="text-xs text-gray-400 mt-1.5">Pre-baked response, ~500ms latency</p>
+        </div>
+
+        <!-- Miro -->
+        <div class="rounded-lg border border-gray-200 p-3 mb-3">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">📋</span>
+            <span class="text-sm font-semibold text-gray-800">Miro Board</span>
+            <span id="miro-cred-badge" class="ml-auto text-xs hidden"></span>
+          </div>
+          <p class="text-xs text-gray-500 mb-2">Creates session summary cards</p>
+          <div class="flex gap-1">
+            <button id="miro-mock-btn" class="toggle-btn toggle-active" onclick="setMode('miro','mock')">Mock</button>
+            <button id="miro-real-btn" class="toggle-btn toggle-inactive" onclick="setMode('miro','real')">Real API</button>
+          </div>
+          <p id="miro-note" class="text-xs text-gray-400 mt-1.5">Returns fake card ID, ~300ms latency</p>
+        </div>
+
+        <!-- Database (always real) -->
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-base">🗃️</span>
+            <span class="text-sm font-semibold text-gray-600">Database</span>
+            <span class="ml-auto text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Real (In-Memory)</span>
+          </div>
+          <p class="text-xs text-gray-400">SQLite — fresh DB per run</p>
+        </div>
+      </div>
+
+      <!-- Test Data -->
+      <div>
+        <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Test Data</h2>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600 space-y-1">
+          <div>👤 User ID: <span class="font-mono text-gray-800">999000001</span></div>
+          <div>🍽️ Food: <span class="font-mono text-gray-800">food_photo.jpg</span></div>
+          <div>📈 CGM: <span class="font-mono text-gray-800">cgm_screenshot.jpg</span></div>
+          <div>🏃 Activity: <span class="font-mono text-gray-800 text-xs">30 min walk</span></div>
+        </div>
+      </div>
+
+      <!-- Run Button -->
+      <div class="mt-auto">
+        <button
+          id="run-btn"
+          onclick="runWorkflow()"
+          class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ▶ Run Workflow
+        </button>
+        <p id="run-hint" class="text-xs text-gray-400 text-center mt-1.5">Ctrl+Enter to run</p>
+      </div>
+    </aside>
+
+    <!-- ── Center Panel: Workflow Pipeline ───────────────────────── -->
+    <section class="flex-1 overflow-y-auto p-4 bg-gray-50">
+      <div class="max-w-md mx-auto">
+
+        <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Workflow Pipeline</h2>
+
+        <!-- Steps -->
+        <div id="pipeline" class="space-y-1">
+
+          <!-- Step 1: Open Session -->
+          <div id="step-open_session" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-open_session" class="text-base w-6 text-center">1️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Open Session</span>
+                  <span id="spinner-open_session" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-open_session" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-open_session" class="hidden text-red-500 text-sm">✕</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">SessionService → Database</div>
+              </div>
+              <div id="timing-open_session" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-open_session" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 2: Add Food Photo -->
+          <div id="step-add_food" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-add_food" class="text-base w-6 text-center">2️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Add Food Photo</span>
+                  <span id="spinner-add_food" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-add_food" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-add_food" class="hidden text-red-500 text-sm">✕</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">SessionService → Storage + DB</div>
+              </div>
+              <div id="timing-add_food" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-add_food" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 3: Add CGM Screenshot -->
+          <div id="step-add_cgm" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-add_cgm" class="text-base w-6 text-center">3️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Add CGM Screenshot</span>
+                  <span id="spinner-add_cgm" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-add_cgm" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-add_cgm" class="hidden text-red-500 text-sm">✕</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">SessionService → Storage + DB</div>
+              </div>
+              <div id="timing-add_cgm" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-add_cgm" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 4: Add Activity Note -->
+          <div id="step-add_activity" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-add_activity" class="text-base w-6 text-center">4️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Add Activity Note</span>
+                  <span id="spinner-add_activity" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-add_activity" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-add_activity" class="hidden text-red-500 text-sm">✕</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">SessionService → Database</div>
+              </div>
+              <div id="timing-add_activity" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-add_activity" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 5: Complete Session -->
+          <div id="step-complete_session" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-complete_session" class="text-base w-6 text-center">5️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Complete Session</span>
+                  <span id="spinner-complete_session" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-complete_session" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-complete_session" class="hidden text-red-500 text-sm">✕</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">SessionService → DB (validate + set COMPLETED)</div>
+              </div>
+              <div id="timing-complete_session" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-complete_session" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 6: AI Analysis -->
+          <div id="step-ai_analysis" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-ai_analysis" class="text-base w-6 text-center">6️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">AI Analysis</span>
+                  <span id="spinner-ai_analysis" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-ai_analysis" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-ai_analysis" class="hidden text-red-500 text-sm">✕</span>
+                  <span id="ai-mode-badge" class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">mock</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">AIService → Anthropic API → AnalysisRepository</div>
+              </div>
+              <div id="timing-ai_analysis" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-ai_analysis" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+          <div class="step-arrow">↓</div>
+
+          <!-- Step 7: Miro Card -->
+          <div id="step-miro_card" class="step-card step-pending rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span id="icon-miro_card" class="text-base w-6 text-center">7️⃣</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">Create Miro Card</span>
+                  <span id="spinner-miro_card" class="hidden"><span class="spinner"></span></span>
+                  <span id="check-miro_card" class="hidden text-green-500 text-sm">✓</span>
+                  <span id="err-miro_card" class="hidden text-red-500 text-sm">✕</span>
+                  <span id="miro-mode-badge" class="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">mock</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">MiroService → Miro REST API (fire-and-forget)</div>
+              </div>
+              <div id="timing-miro_card" class="text-xs text-gray-400 font-mono hidden"></div>
+            </div>
+            <div id="detail-miro_card" class="mt-2 text-xs text-gray-600 hidden font-mono"></div>
+          </div>
+
+        </div><!-- /pipeline -->
+
+        <!-- Analysis Summary (shown after run) -->
+        <div id="analysis-summary" class="hidden mt-6">
+          <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Analysis Result</h2>
+          <div id="summary-content" class="summary-card text-xs space-y-2"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Right Panel: Event Log ────────────────────────────────── -->
+    <aside class="w-96 bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+        <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Requests &amp; Responses</h2>
+        <button onclick="clearLog()" class="text-xs text-gray-400 hover:text-gray-600 transition-colors">Clear</button>
+      </div>
+
+      <!-- Legend -->
+      <div class="px-3 py-1.5 border-b border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
+        <span class="text-xs text-gray-400 flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-purple-400 inline-block"></span> DB</span>
+        <span class="text-xs text-gray-400 flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-orange-400 inline-block"></span> API</span>
+        <span class="text-xs text-gray-400 flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-sky-400 inline-block"></span> Telegram</span>
+        <span class="text-xs text-gray-400 flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-green-400 inline-block"></span> Step OK</span>
+        <span class="text-xs text-gray-400 flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-red-400 inline-block"></span> Error</span>
+      </div>
+
+      <div id="event-log" class="flex-1 overflow-y-auto p-2 space-y-1 text-xs"></div>
+    </aside>
+
+  </div><!-- /main layout -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+const state = {
+  ws: null,
+  connected: false,
+  running: false,
+  config: { ai_mode: 'mock', miro_mode: 'mock' },
+  stepTimers: {},   // step -> start timestamp (ms)
+};
+
+// ── WebSocket ──────────────────────────────────────────────────────────
+function connect() {
+  const wsUrl = `ws://${window.location.host}/ws`;
+  state.ws = new WebSocket(wsUrl);
+
+  state.ws.onopen = () => {
+    state.connected = true;
+    setWsStatus('connected');
+    fetchStatus();
+  };
+
+  state.ws.onmessage = (e) => {
+    try { handleEvent(JSON.parse(e.data)); }
+    catch(err) { console.error('Bad WS message', e.data, err); }
+  };
+
+  state.ws.onclose = () => {
+    state.connected = false;
+    setWsStatus('disconnected');
+    setTimeout(connect, 2500);
+  };
+
+  state.ws.onerror = () => {
+    setWsStatus('error');
+  };
+}
+
+function setWsStatus(s) {
+  const dot = document.getElementById('ws-dot');
+  const lbl = document.getElementById('ws-label');
+  const colors = { connected: 'bg-green-400', disconnected: 'bg-gray-300', error: 'bg-red-400' };
+  const labels = { connected: 'Connected', disconnected: 'Reconnecting…', error: 'Error' };
+  dot.className = `inline-block w-2 h-2 rounded-full ${colors[s] || 'bg-gray-300'}`;
+  lbl.textContent = labels[s] || s;
+}
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    updateCredBadges(data);
+  } catch(e) {}
+}
+
+function updateCredBadges(data) {
+  const aiB = document.getElementById('ai-cred-badge');
+  const miroB = document.getElementById('miro-cred-badge');
+
+  if (data.ai_credentials_available) {
+    aiB.textContent = '🔑 key found';
+    aiB.className = 'ml-auto text-xs text-green-600 font-semibold';
+    aiB.classList.remove('hidden');
+  }
+  if (data.miro_credentials_available) {
+    miroB.textContent = '🔑 key found';
+    miroB.className = 'ml-auto text-xs text-green-600 font-semibold';
+    miroB.classList.remove('hidden');
+  }
+}
+
+// ── Controls ────────────────────────────────────────────────────────────
+function setMode(component, mode) {
+  state.config[`${component}_mode`] = mode;
+
+  const active = `${component}-${mode}-btn`;
+  const inactive = `${component}-${mode === 'mock' ? 'real' : 'mock'}-btn`;
+  document.getElementById(active).className = 'toggle-btn toggle-active';
+  document.getElementById(inactive).className = 'toggle-btn toggle-inactive';
+
+  const notes = {
+    ai: {
+      mock: 'Pre-baked response, ~500ms latency',
+      real: 'Calls Anthropic API — requires ANTHROPIC_API_KEY',
+    },
+    miro: {
+      mock: 'Returns fake card ID, ~300ms latency',
+      real: 'Calls Miro REST API — requires MIRO_ACCESS_TOKEN',
+    },
+  };
+  document.getElementById(`${component}-note`).textContent = notes[component][mode];
+
+  // Update mode badges on steps
+  if (component === 'ai') {
+    const b = document.getElementById('ai-mode-badge');
+    b.textContent = mode;
+    b.className = mode === 'mock'
+      ? 'text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded'
+      : 'text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold';
+  }
+  if (component === 'miro') {
+    const b = document.getElementById('miro-mode-badge');
+    b.textContent = mode;
+    b.className = mode === 'mock'
+      ? 'text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded'
+      : 'text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold';
+  }
+}
+
+function runWorkflow() {
+  if (!state.connected) { alert('Not connected to server.'); return; }
+  if (state.running) return;
+
+  resetPipeline();
+  state.running = true;
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-hint').textContent = 'Running…';
+  document.getElementById('analysis-summary').classList.add('hidden');
+
+  state.ws.send(JSON.stringify({ action: 'run', config: state.config }));
+}
+
+function clearLog() {
+  document.getElementById('event-log').innerHTML = '';
+}
+
+// ── Pipeline Reset ──────────────────────────────────────────────────────
+const STEPS = ['open_session','add_food','add_cgm','add_activity','complete_session','ai_analysis','miro_card'];
+
+function resetPipeline() {
+  for (const step of STEPS) {
+    const card = document.getElementById(`step-${step}`);
+    if (card) { card.className = 'step-card step-pending rounded-lg p-3'; }
+    hide(`spinner-${step}`);
+    hide(`check-${step}`);
+    hide(`err-${step}`);
+    hide(`timing-${step}`);
+    hide(`detail-${step}`);
+  }
+  state.stepTimers = {};
+}
+
+// ── Event Handler ───────────────────────────────────────────────────────
+function handleEvent(ev) {
+  const { type, step } = ev;
+
+  if (type === 'run_started') {
+    addLogEntry(ev, '▶ Run started', 'text-blue-600 font-bold');
+    return;
+  }
+  if (type === 'run_complete') {
+    state.running = false;
+    document.getElementById('run-btn').disabled = false;
+    document.getElementById('run-hint').textContent = 'Ctrl+Enter to run';
+    addLogEntry(ev, '✓ Run complete', 'text-green-600 font-bold');
+    return;
+  }
+
+  if (type === 'step_start' && step) {
+    setStepState(step, 'running');
+    state.stepTimers[step] = Date.now();
+  }
+  if (type === 'step_success' && step) {
+    const elapsed = state.stepTimers[step] ? `${Date.now() - state.stepTimers[step]}ms` : '';
+    setStepState(step, 'success');
+    showTiming(step, elapsed);
+    showDetail(step, ev.payload);
+    if (step === 'ai_analysis') { showAnalysisSummary(ev.payload); }
+  }
+  if (type === 'step_error' && step) {
+    setStepState(step, 'error');
+    const elapsed = state.stepTimers[step] ? `${Date.now() - state.stepTimers[step]}ms` : '';
+    showTiming(step, elapsed);
+  }
+
+  // Always add to event log
+  addLogToPanel(ev);
+}
+
+function setStepState(step, state_) {
+  const card = document.getElementById(`step-${step}`);
+  if (!card) return;
+  const classes = {
+    running: 'step-card step-running rounded-lg p-3',
+    success: 'step-card step-success rounded-lg p-3',
+    error:   'step-card step-error rounded-lg p-3',
+  };
+  card.className = classes[state_] || 'step-card step-pending rounded-lg p-3';
+  hide(`spinner-${step}`);
+  hide(`check-${step}`);
+  hide(`err-${step}`);
+  if (state_ === 'running') show(`spinner-${step}`);
+  if (state_ === 'success') show(`check-${step}`);
+  if (state_ === 'error')   show(`err-${step}`);
+}
+
+function showTiming(step, t) {
+  const el = document.getElementById(`timing-${step}`);
+  if (el && t) { el.textContent = t; el.classList.remove('hidden'); }
+}
+
+function showDetail(step, payload) {
+  const el = document.getElementById(`detail-${step}`);
+  if (!el || !payload) return;
+  const items = [];
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === 'object') continue; // skip nested objects in inline detail
+    items.push(`${k}: ${v}`);
+  }
+  if (items.length > 0) {
+    el.textContent = items.join(' · ');
+    el.classList.remove('hidden');
+  }
+}
+
+function showAnalysisSummary(payload) {
+  if (!payload || !payload.nutrition) return;
+  const n = payload.nutrition;
+  const summary = document.getElementById('analysis-summary');
+  const content = document.getElementById('summary-content');
+  content.innerHTML = `
+    <div class="grid grid-cols-2 gap-2">
+      <div>
+        <div class="font-bold text-gray-700 mb-1">🥗 Nutrition</div>
+        <div>Carbs: <b>${n.carbs_g ?? '?'}g</b></div>
+        <div>Protein: <b>${n.proteins_g ?? '?'}g</b></div>
+        <div>Fat: <b>${n.fats_g ?? '?'}g</b></div>
+        <div>GI: <b>~${n.gi_estimate ?? '?'}</b></div>
+      </div>
+      <div>
+        <div class="font-bold text-gray-700 mb-1">📊 Analysis</div>
+        <div>CGM parseable: <b>${payload.cgm_parseable ? '✓' : '✕'}</b></div>
+        <div>Recommendations: <b>${payload.recommendations_count ?? 0}</b></div>
+      </div>
+    </div>
+    <div class="mt-2 text-gray-600 italic">${payload.target_range_note ?? ''}</div>
+  `;
+  summary.classList.remove('hidden');
+}
+
+// ── Event Log ────────────────────────────────────────────────────────────
+const TYPE_META = {
+  step_start:      { icon: '▷', label: 'Step',     color: 'text-gray-500' },
+  step_success:    { icon: '✓', label: 'OK',        color: 'text-green-600' },
+  step_error:      { icon: '✕', label: 'Error',     color: 'text-red-600' },
+  db_request:      { icon: '→', label: 'DB',        color: 'text-purple-600' },
+  db_response:     { icon: '←', label: 'DB',        color: 'text-purple-700' },
+  api_request:     { icon: '→', label: 'API',       color: 'text-orange-600' },
+  api_response:    { icon: '←', label: 'API',       color: 'text-orange-700' },
+  telegram_message:{ icon: '→', label: 'Telegram',  color: 'text-sky-600' },
+  info:            { icon: 'ℹ', label: 'Info',      color: 'text-gray-500' },
+  config_error:    { icon: '⚠', label: 'Config',    color: 'text-red-600' },
+  workflow_error:  { icon: '⚠', label: 'Error',     color: 'text-red-600' },
+  run_started:     { icon: '▶', label: 'Run',       color: 'text-blue-600' },
+  run_complete:    { icon: '✓', label: 'Done',      color: 'text-green-600' },
+};
+
+function addLogToPanel(ev) {
+  const log = document.getElementById('event-log');
+  const meta = TYPE_META[ev.type] || { icon: '·', label: ev.type, color: 'text-gray-500' };
+
+  const entry = document.createElement('div');
+  entry.className = `ev-${ev.type} bg-white rounded border border-gray-100 px-2 py-1.5 text-xs`;
+
+  const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:1}) : '';
+  const latency = ev.payload && ev.payload.latency_ms !== undefined ? `${ev.payload.latency_ms}ms` : '';
+
+  let headerText = ev.label || ev.step || '';
+  let payloadKeys = '';
+  if (ev.payload) {
+    const keys = Object.keys(ev.payload).filter(k => k !== 'latency_ms').slice(0, 3);
+    payloadKeys = keys.map(k => {
+      const v = ev.payload[k];
+      if (typeof v === 'object') return '';
+      return `<span class="text-gray-500">${k}=<span class="text-gray-800">${v}</span></span>`;
+    }).filter(Boolean).join(' ');
+  }
+
+  // Build collapsible payload
+  let payloadHtml = '';
+  if (ev.payload && Object.keys(ev.payload).length > 0) {
+    const jsonStr = JSON.stringify(ev.payload, null, 2);
+    payloadHtml = `
+      <div class="json-toggle text-gray-400 hover:text-gray-600 mt-0.5" onclick="toggleJson(this)">
+        <span class="text-xs">▸ payload</span>
+      </div>
+      <pre class="json-content text-gray-600 hidden mt-0.5 bg-gray-50 rounded p-1 overflow-x-auto">${escapeHtml(jsonStr)}</pre>
+    `;
+  }
+
+  entry.innerHTML = `
+    <div class="flex items-baseline gap-1.5">
+      <span class="${meta.color} font-bold w-4 text-center flex-shrink-0">${meta.icon}</span>
+      <span class="font-semibold text-gray-700">${escapeHtml(headerText)}</span>
+      <span class="text-gray-400 ml-auto flex-shrink-0 text-xs">${latency ? latency + ' · ' : ''}${ts}</span>
+    </div>
+    ${payloadKeys ? `<div class="mt-0.5 ml-5">${payloadKeys}</div>` : ''}
+    <div class="ml-5">${payloadHtml}</div>
+  `;
+
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function addLogEntry(ev, text, classes) {
+  const log = document.getElementById('event-log');
+  const div = document.createElement('div');
+  div.className = `px-2 py-1 text-xs ${classes}`;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function toggleJson(el) {
+  const pre = el.nextElementSibling;
+  const open = !pre.classList.contains('hidden');
+  pre.classList.toggle('hidden', open);
+  el.querySelector('span').textContent = open ? '▸ payload' : '▾ payload';
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────
+function show(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
+function hide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Keyboard shortcut ─────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runWorkflow(); }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────
+connect();
+</script>
+</body>
+</html>

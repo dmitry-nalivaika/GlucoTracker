@@ -1,0 +1,135 @@
+"""Unit tests for formatters.py — T050.
+
+All formatter functions must return valid MarkdownV2 content without
+raw stack traces or Python exceptions exposed to users.
+"""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import MagicMock
+
+from glucotrack.bot import formatters
+
+
+def _make_analysis(
+    carbs: int = 50,
+    proteins: int = 25,
+    fats: int = 12,
+    gi: int = 70,
+    notes: str = "",
+) -> MagicMock:
+    analysis = MagicMock()
+    analysis.nutrition_json = json.dumps(
+        {
+            "carbs_g": carbs,
+            "proteins_g": proteins,
+            "fats_g": fats,
+            "gi_estimate": gi,
+            "notes": notes,
+        }
+    )
+    analysis.glucose_curve_json = json.dumps(
+        [
+            {"timing_label": "before", "estimated_value_mg_dl": 90, "in_range": True, "notes": ""},
+            {
+                "timing_label": "1h after",
+                "estimated_value_mg_dl": 155,
+                "in_range": False,
+                "notes": "spike",
+            },
+        ]
+    )
+    analysis.correlation_json = json.dumps(
+        {
+            "spikes": ["1h after"],
+            "dips": [],
+            "stable_zones": [],
+            "summary": "Glucose spiked after meal.",
+        }
+    )
+    analysis.recommendations_json = json.dumps(
+        [
+            {"priority": 1, "text": "Reduce refined carbs."},
+            {"priority": 2, "text": "Walk 10 minutes after eating."},
+        ]
+    )
+    analysis.within_target_notes = "One reading above 140 mg/dL."
+    return analysis
+
+
+class TestFormatters:
+    """All formatter functions return valid MarkdownV2 content."""
+
+    def test_fmt_analysis_result_contains_all_four_sections(self) -> None:
+        text = formatters.fmt_analysis_result(_make_analysis())
+        assert "Nutrition" in text
+        assert "Glucose" in text
+        assert "Correlation" in text
+        assert "Recommendations" in text
+
+    def test_fmt_analysis_result_contains_macro_values(self) -> None:
+        text = formatters.fmt_analysis_result(_make_analysis(carbs=80, proteins=30, fats=15, gi=75))
+        assert "80" in text
+        assert "30" in text
+        assert "15" in text
+        assert "75" in text
+
+    def test_fmt_analysis_result_shows_range_indicators(self) -> None:
+        text = formatters.fmt_analysis_result(_make_analysis())
+        # in_range=True → ✅, in_range=False → ⚠️
+        assert "✅" in text
+        assert "⚠️" in text
+
+    def test_fmt_analysis_result_includes_target_note(self) -> None:
+        analysis = _make_analysis()
+        analysis.within_target_notes = "One spike above 140."
+        text = formatters.fmt_analysis_result(analysis)
+        assert "140" in text
+
+    def test_fmt_analysis_result_no_stack_trace(self) -> None:
+        text = formatters.fmt_analysis_result(_make_analysis())
+        assert "Traceback" not in text
+        assert "Exception" not in text
+        assert "Error" not in text
+
+    def test_fmt_analysis_error_is_human_readable(self) -> None:
+        text = formatters.fmt_analysis_error()
+        assert "Analysis failed" in text
+        assert "Traceback" not in text
+        assert len(text) > 10
+
+    def test_fmt_cgm_unparseable_is_human_readable(self) -> None:
+        text = formatters.fmt_cgm_unparseable()
+        assert "screenshot" in text.lower() or "cgm" in text.lower()
+        assert "Traceback" not in text
+
+    def test_fmt_generic_error_is_human_readable(self) -> None:
+        text = formatters.fmt_generic_error()
+        assert "wrong" in text.lower() or "error" in text.lower()
+        assert "Traceback" not in text
+
+    def test_fmt_trend_insufficient_includes_counts(self) -> None:
+        text = formatters.fmt_trend_insufficient(current=2, required=5)
+        assert "2" in text
+        assert "5" in text
+
+    def test_fmt_trend_coming_soon_includes_count(self) -> None:
+        text = formatters.fmt_trend_coming_soon(7)
+        assert "7" in text
+
+    def test_fmt_welcome_returns_non_empty_string(self) -> None:
+        text = formatters.fmt_welcome("Alice")
+        assert "Alice" in text
+        assert len(text) > 20
+
+    def test_fmt_help_contains_all_commands(self) -> None:
+        text = formatters.fmt_help()
+        for cmd in ["/start", "/new", "/done", "/status", "/trend", "/cancel", "/help"]:
+            assert cmd in text
+
+    def test_fmt_session_status_includes_counts(self) -> None:
+        text = formatters.fmt_session_status(food=3, cgm=2, activity=1)
+        assert "3" in text
+        assert "2" in text
+        assert "1" in text

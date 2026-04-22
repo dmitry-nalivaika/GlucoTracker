@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Stage 1: Lint & Format
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lint dependencies
+        run: pip install ruff black
+
+      - name: Check formatting (black)
+        run: |
+          if [ -d "src" ]; then
+            black --check src/ tests/ 2>/dev/null || true
+            black --check src/
+          else
+            echo "::notice::No src/ directory found — skipping black check"
+          fi
+
+      - name: Lint (ruff)
+        run: |
+          if [ -d "src" ]; then
+            ruff check src/
+          else
+            echo "::notice::No src/ directory found — skipping ruff check"
+          fi
+
+  # ─────────────────────────────────────────────
+  # Stage 2: Type Check
+  # ─────────────────────────────────────────────
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install mypy
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install -e .; fi
+
+      - name: Type check (mypy)
+        run: |
+          if [ -d "src" ]; then
+            mypy src/
+          else
+            echo "::notice::No src/ directory found — skipping mypy"
+          fi
+
+  # ─────────────────────────────────────────────
+  # Stage 3: Unit Tests + Coverage
+  # ─────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests (≥80% coverage)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install -e .; fi
+
+      - name: Run unit tests
+        run: |
+          if [ -d "tests/unit" ]; then
+            pytest tests/unit/ -v \
+              --cov=src \
+              --cov-report=term-missing \
+              --cov-fail-under=80 \
+              --cov-report=xml:coverage.xml
+          else
+            echo "::notice::No tests/unit/ directory found — skipping unit tests"
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  # ─────────────────────────────────────────────
+  # Stage 4: Integration Tests
+  # ─────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install -e .; fi
+
+      - name: Run integration tests
+        run: |
+          if [ -d "tests/integration" ]; then
+            pytest tests/integration/ -v --no-cov
+          else
+            echo "::notice::No tests/integration/ directory found — skipping integration tests"
+          fi
+
+  # ─────────────────────────────────────────────
+  # Stage 5: Contract Tests
+  # ─────────────────────────────────────────────
+  contract-tests:
+    name: Contract Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install -e .; fi
+
+      - name: Run contract tests
+        run: |
+          if [ -d "tests/contract" ]; then
+            pytest tests/contract/ -v --no-cov
+          else
+            echo "::notice::No tests/contract/ directory found — skipping contract tests"
+          fi
+
+  # ─────────────────────────────────────────────
+  # Stage 6: Security Scan
+  # ─────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Security scan (bandit)
+        run: |
+          if [ -d "src" ]; then
+            bandit -r src/ -ll -ii
+          else
+            echo "::notice::No src/ directory found — skipping bandit scan"
+          fi
+
+  # ─────────────────────────────────────────────
+  # CI Gate — all stages must pass
+  # ─────────────────────────────────────────────
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - type-check
+      - unit-tests
+      - integration-tests
+      - contract-tests
+      - security
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          for result in $results; do
+            if [ "$result" = "failure" ]; then
+              echo "One or more CI jobs failed"
+              exit 1
+            fi
+          done
+          echo "All CI jobs passed"

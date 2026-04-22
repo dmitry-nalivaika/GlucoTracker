@@ -1,0 +1,15 @@
+.vscode/settings.json
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.env
+data/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
