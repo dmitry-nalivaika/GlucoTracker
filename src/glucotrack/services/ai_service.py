@@ -86,6 +86,59 @@ def _detect_media_type(data: bytes) -> str:
     return "image/jpeg"
 
 
+def _extract_json(text: str) -> str:
+    """Extract the JSON object from a Claude response.
+
+    Claude may wrap the JSON in markdown code fences (```json...``` or ```...```)
+    or prefix it with prose.  We try three strategies in order:
+
+    1. Direct parse (fast-path: response is already clean JSON).
+    2. Strip a markdown code fence and return the inner content.
+    3. Find the first ``{`` … last ``}`` substring (handles preamble text).
+
+    Returns the best candidate string so the caller can attempt json.loads().
+    If none of the heuristics produce a valid JSON string the original text is
+    returned so the caller's JSONDecodeError reports the full raw content.
+    """
+    stripped = text.strip()
+
+    # Fast-path: already valid JSON
+    try:
+        json.loads(stripped)
+        return stripped
+    except json.JSONDecodeError:
+        pass
+
+    # Strip ```json ... ``` or ``` ... ``` fences
+    if stripped.startswith("```"):
+        # Remove the opening fence line (```json or ```)
+        lines = stripped.splitlines()
+        # Drop first and last lines if they are fence markers
+        inner_lines = lines[1:]
+        if inner_lines and inner_lines[-1].strip() == "```":
+            inner_lines = inner_lines[:-1]
+        candidate = "\n".join(inner_lines).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Find first { … last } in the text (handles leading prose)
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end > start:
+        candidate = stripped[start : end + 1]
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Give up — return original so the caller logs the full raw text
+    return text
+
+
 class AnalysisError(Exception):
     """Raised when Claude API call fails after retries."""
 
@@ -215,7 +268,7 @@ class AIService:
         first_block = response.content[0]
         raw_text: str = getattr(first_block, "text", "")  # TextBlock has .text; others do not
         try:
-            result: dict[str, Any] = json.loads(raw_text)
+            result: dict[str, Any] = json.loads(_extract_json(raw_text))
             return result
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse Claude response as JSON: %s", raw_text[:200])
