@@ -135,6 +135,7 @@ class AnalysisService:
                 return
 
             # Persist analysis
+            activity_data = result.get("activity")
             analysis = await self._analysis_repo.save_analysis(
                 user_id=user_id,
                 session_id=session_id,
@@ -144,6 +145,7 @@ class AnalysisService:
                 recommendations=result.get("recommendations", []),
                 within_target_notes=result.get("target_range_note"),
                 raw_response=json.dumps(result),
+                activity_json=json.dumps(activity_data) if activity_data is not None else None,
             )
             await self._db.commit()
 

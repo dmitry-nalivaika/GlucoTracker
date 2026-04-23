@@ -30,26 +30,39 @@ exactly this structure (no markdown, pure JSON):
     "proteins_g": <number or null>,
     "fats_g": <number or null>,
     "gi_estimate": <number 0-100 or null>,
+    "gi_category": "<'low' | 'medium' | 'high' | null: GI category based on gi_estimate>",
+    "food_items": ["<identified food item 1>", "<food item 2>"],
+    "glucose_impact_narrative": "<2-3 sentences explaining expected glucose impact, \
+must explicitly reference the 70-140 mg/dL target range>",
     "notes": "<string>"
+  },
+  "activity": {
+    "description": "<string: what activity was logged, or null if none>",
+    "glucose_modulation": "<string: how this activity affects glucose response; \
+use 'No activity logged.' when description is null>",
+    "effect_summary": "<string: overall effect observed or expected; \
+use 'No activity to analyse.' when description is null>"
   },
   "glucose_curve": [
     {
       "timing_label": "<string>",
       "estimated_value_mg_dl": <number or null>,
       "in_range": <boolean: true if value is 70-140 mg/dL, else false, null if unknown>,
-      "notes": "<string>"
+      "notes": "<string>",
+      "curve_shape_label": "<descriptive label e.g. 'sharp spike with recovery', \
+'stable within range', 'gradual rise', 'gradual rise with plateau'>"
     }
   ],
   "correlation": {
-    "spikes": ["<string>"],
-    "dips": ["<string>"],
-    "stable_zones": ["<string>"],
-    "summary": "<string>"
+    "spikes": ["<cause-effect statement explicitly naming food or activity>"],
+    "dips": ["<cause-effect statement>"],
+    "stable_zones": ["<explanation>"],
+    "summary": "<2+ sentences with explicit references to foods or activities from this session>"
   },
   "recommendations": [
     {
       "priority": <1-5 integer>,
-      "text": "<actionable recommendation>"
+      "text": "<session-specific actionable suggestion referencing the meal or activity by name>"
     }
   ],
   "target_range_note": "<string: summary of 70-140 mg/dL compliance>",
@@ -58,7 +71,9 @@ exactly this structure (no markdown, pure JSON):
 }
 
 The healthy glucose target range is 70–140 mg/dL. Explicitly note any readings \
-outside this range. If the CGM screenshot is unreadable, set cgm_parseable=false."""
+outside this range. If the CGM screenshot is unreadable, set cgm_parseable=false. \
+gi_category MUST be 'low' (GI < 55), 'medium' (GI 55-69), 'high' (GI >= 70), or null. \
+When no activity was logged, set activity.description to null."""
 
 
 class AnalysisError(Exception):

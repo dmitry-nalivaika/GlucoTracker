@@ -45,6 +45,7 @@ class AnalysisRepository:
         recommendations: list[object],
         within_target_notes: str | None,
         raw_response: str,
+        activity_json: str | None = None,
     ) -> AIAnalysis:
         """Persist an AIAnalysis for session_id owned by user_id."""
         analysis = AIAnalysis(
@@ -56,6 +57,7 @@ class AnalysisRepository:
             correlation_json=json.dumps(correlation),
             recommendations_json=json.dumps(recommendations),
             within_target_notes=within_target_notes,
+            activity_json=activity_json,
             raw_response=raw_response,
             created_at=utcnow(),
         )
