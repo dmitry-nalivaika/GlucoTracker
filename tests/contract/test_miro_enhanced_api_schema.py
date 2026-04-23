@@ -269,8 +269,14 @@ class TestMiroEnhancedAPISchemaContract:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_sticky_note_position_uses_parent_top_left(self) -> None:
-        """Sticky note position must use relativeTo=parent_top_left for frame-relative coords."""
+    async def test_sticky_note_position_has_no_relativeto(self) -> None:
+        """Sticky note position must NOT include relativeTo.
+
+        Miro's PositionChange schema only has x and y (canvas-absolute coords).
+        relativeTo is not a valid field and would be silently ignored, leaving
+        notes at canvas x=600 (right edge of a 1200px frame) — invisible inside
+        the frame.  Canvas coordinates are computed explicitly from frame dimensions.
+        """
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
         analysis = _make_analysis()
         captured_positions: list[dict] = []
@@ -303,8 +309,54 @@ class TestMiroEnhancedAPISchemaContract:
 
         assert len(captured_positions) >= 1, "No sticky notes captured"
         for pos in captured_positions:
-            assert pos.get("relativeTo") == "parent_top_left", (
-                f"Sticky notes must use relativeTo=parent_top_left for frame-relative coords — got: {pos}"
+            assert "relativeTo" not in pos, (
+                f"Sticky notes must not include relativeTo (unsupported in PositionChange schema) — got: {pos}"
+            )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_sticky_note_geometry_has_width_only(self) -> None:
+        """Sticky note geometry must only set width, not height.
+
+        FixedRatioNoRotationGeometry accepts either width OR height, not both.
+        Passing both causes a 400 Bad Request from the Miro API.
+        """
+        service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
+        analysis = _make_analysis()
+        captured_geometries: list[dict] = []
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/frames").mock(
+            return_value=httpx.Response(
+                201, json={"id": "frame-geom-test", "type": "frame", "data": {}, "links": {}}
+            )
+        )
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-geom-test"}},
+            )
+        )
+
+        def capture_sticky(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if "geometry" in body:
+                captured_geometries.append(body["geometry"])
+            return httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/sticky_notes").mock(
+            side_effect=capture_sticky
+        )
+
+        await service.create_enhanced_session_card(
+            analysis=analysis, session_images=_session_images()
+        )
+
+        assert len(captured_geometries) >= 1, "No sticky notes captured"
+        for geom in captured_geometries:
+            assert "width" in geom, f"Sticky note geometry must include width — got: {geom}"
+            assert "height" not in geom, (
+                f"Sticky note geometry must not include height "
+                f"(FixedRatioNoRotationGeometry cannot set both) — got: {geom}"
             )
 
     @pytest.mark.asyncio
