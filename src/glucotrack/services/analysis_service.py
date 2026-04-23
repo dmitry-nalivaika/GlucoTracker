@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from telegram.constants import ParseMode
@@ -236,6 +237,18 @@ class AnalysisService:
             else:
                 card_id = await self._miro.create_session_card(analysis=analysis)
             logger.info("Miro card created: %s (record=%s)", card_id, miro_card_id)
+            # Best-effort status update — non-fatal if session is closing
+            try:
+                result = await self._db.execute(select(MiroCard).where(MiroCard.id == miro_card_id))
+                miro_card = result.scalar_one_or_none()
+                if miro_card is not None:
+                    miro_card.status = MiroCardStatus.CREATED
+                    miro_card.miro_card_id = card_id if isinstance(card_id, str) else None
+                    await self._db.commit()
+            except SQLAlchemyError as db_exc:
+                logger.warning("Failed to update MiroCard status: %s", db_exc)
+            except Exception as db_exc:
+                logger.warning("Unexpected error updating MiroCard status: %s", db_exc)
         except Exception as exc:
             logger.error(
                 "Miro card creation failed (non-blocking, record=%s): %s", miro_card_id, exc

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -88,6 +89,7 @@ class TestAnalysisFlow:
             chat_id=99999,
             bot=mock_bot,
         )
+        await asyncio.sleep(0.1)  # let background Miro task complete before teardown
 
         # AIAnalysis persisted with correct user_id
         analysis_repo = AnalysisRepository(test_db)
@@ -173,6 +175,7 @@ class TestAnalysisFlow:
             chat_id=201,
             bot=mock_bot,
         )
+        await asyncio.sleep(0.1)  # let background Miro task complete before teardown
 
         analysis_repo = AnalysisRepository(test_db)
         # User B should NOT be able to retrieve User A's analysis
@@ -221,7 +224,6 @@ class TestAnalysisFlow:
         )
 
         # create_enhanced_session_card must have been called (fire-and-forget, so give it a moment)
-        import asyncio
         await asyncio.sleep(0)  # yield to allow background tasks to start
 
         # Check that the new method is wired — either called directly or via create_task
@@ -246,3 +248,142 @@ class TestAnalysisFlow:
             assert img["type"] in ("food", "cgm")
             assert "file_bytes" in img
             assert "telegram_file_id" in img
+
+    @pytest.mark.asyncio
+    async def test_image_upload_failure_does_not_abort_card(
+        self, test_db, sample_user, sample_session
+    ):
+        """A failed image upload does not abort the Miro card (FR-011, T039)."""
+        import httpx
+        import respx
+
+        sess_repo = SessionRepository(test_db)
+        await sess_repo.add_food_entry(
+            sample_user.telegram_user_id, sample_session.id, "food.jpg", "tg_f"
+        )
+        await sess_repo.add_cgm_entry(
+            sample_user.telegram_user_id, sample_session.id, "cgm.jpg", "tg_c", "1h after"
+        )
+        await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
+
+        sticky_call_count = 0
+
+        with respx.mock:
+            respx.post("https://api.miro.com/v2/boards/test-board/frames").mock(
+                return_value=httpx.Response(
+                    201,
+                    json={"id": "frame-resilience", "type": "frame", "data": {}, "links": {}},
+                )
+            )
+            # Simulate 413 Payload Too Large on image upload
+            respx.post("https://api.miro.com/v2/boards/test-board/images").mock(
+                return_value=httpx.Response(413, json={"message": "Payload Too Large"})
+            )
+
+            def sticky_side_effect(request: httpx.Request) -> httpx.Response:
+                nonlocal sticky_call_count
+                sticky_call_count += 1
+                return httpx.Response(201, json={"id": f"sn-{sticky_call_count}", "type": "sticky_note", "data": {}})
+
+            respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
+                side_effect=sticky_side_effect
+            )
+
+            mock_ai = AsyncMock()
+            mock_ai.analyse_session = AsyncMock(return_value=ANALYSIS_RESULT)
+            mock_bot = AsyncMock()
+
+            from glucotrack.services.miro_service import MiroService
+
+            miro_service = MiroService(access_token="tok", board_id="test-board", _retry_delays=())
+
+            service = AnalysisService(
+                db=test_db,
+                ai_service=mock_ai,
+                miro_service=miro_service,
+                storage_root="./data",
+            )
+            await service.run_analysis(
+                user_id=sample_user.telegram_user_id,
+                session_id=sample_session.id,
+                chat_id=99999,
+                bot=mock_bot,
+            )
+            await asyncio.sleep(0.1)
+
+        # Telegram must still be delivered regardless of image failure
+        assert mock_bot.send_message.called
+
+        # All 5 sections + separator (and placeholder sticky notes for failed images) created
+        # At minimum: 6 sticky notes (separator + 5 sections) + at least 1 placeholder
+        assert sticky_call_count >= 6, (
+            f"Expected ≥6 sticky notes even with image failures, got {sticky_call_count}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_miro_card_status_updated_to_created_on_success(
+        self, test_db, sample_user, sample_session
+    ):
+        """MiroCard.status is set to CREATED after successful enhanced card creation (T041)."""
+        import httpx
+        import respx
+        from sqlalchemy import select
+
+        from glucotrack.models.miro import MiroCard, MiroCardStatus
+        from glucotrack.services.miro_service import MiroService
+
+        sess_repo = SessionRepository(test_db)
+        await sess_repo.add_food_entry(
+            sample_user.telegram_user_id, sample_session.id, "food.jpg", "tg_f2"
+        )
+        await sess_repo.add_cgm_entry(
+            sample_user.telegram_user_id, sample_session.id, "cgm.jpg", "tg_c2", "1h after"
+        )
+        await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
+
+        with respx.mock:
+            respx.post("https://api.miro.com/v2/boards/test-board2/frames").mock(
+                return_value=httpx.Response(
+                    201,
+                    json={"id": "frame-status-test", "type": "frame", "data": {}, "links": {}},
+                )
+            )
+            respx.post("https://api.miro.com/v2/boards/test-board2/images").mock(
+                return_value=httpx.Response(
+                    201,
+                    json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-status-test"}},
+                )
+            )
+            respx.post("https://api.miro.com/v2/boards/test-board2/sticky_notes").mock(
+                return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+            )
+
+            mock_ai = AsyncMock()
+            mock_ai.analyse_session = AsyncMock(return_value=ANALYSIS_RESULT)
+            mock_bot = AsyncMock()
+
+            miro_service = MiroService(access_token="tok", board_id="test-board2", _retry_delays=())
+
+            service = AnalysisService(
+                db=test_db,
+                ai_service=mock_ai,
+                miro_service=miro_service,
+                storage_root="./data",
+            )
+            await service.run_analysis(
+                user_id=sample_user.telegram_user_id,
+                session_id=sample_session.id,
+                chat_id=99999,
+                bot=mock_bot,
+            )
+            await asyncio.sleep(0.2)
+
+        # MiroCard record must exist with status=CREATED
+        result = await test_db.execute(
+            select(MiroCard).where(MiroCard.user_id == sample_user.telegram_user_id)
+        )
+        miro_card = result.scalar_one_or_none()
+        assert miro_card is not None
+        assert miro_card.status == MiroCardStatus.CREATED, (
+            f"Expected status=CREATED, got {miro_card.status}"
+        )

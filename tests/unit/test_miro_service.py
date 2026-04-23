@@ -470,3 +470,219 @@ class TestMiroServiceEnhancedCard:
         assert sticky_call_count >= 6, (
             f"Expected ≥6 sticky notes despite image failure, got {sticky_call_count}"
         )
+
+
+class TestMiroBuildSectionText:
+    """Unit tests for _build_section_text() section content — Phases 4–8 (T024–T037)."""
+
+    def _make_analysis_with(self, **overrides: str | None) -> MagicMock:
+        analysis = _make_analysis()
+        for attr, value in overrides.items():
+            setattr(analysis, attr, value)
+        return analysis
+
+    # ── Phase 4 / US2: Food section (T024) ───────────────────────────────────
+
+    def test_food_section_contains_gi_category_and_items(self) -> None:
+        """Food section includes GI category, food items, and glucose impact narrative (T024)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            nutrition_json=json.dumps(
+                {
+                    "carbs_g": 60,
+                    "proteins_g": 15,
+                    "fats_g": 8,
+                    "gi_estimate": 72,
+                    "gi_category": "high",
+                    "food_items": ["white bread", "jam"],
+                    "glucose_impact_narrative": (
+                        "High-GI foods expected to raise glucose rapidly, "
+                        "peaking outside 70–140 mg/dL."
+                    ),
+                    "notes": "",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "food")
+        assert "white bread" in text
+        assert "jam" in text
+        assert "high" in text.lower() or "GI" in text
+        assert "60" in text  # carbs
+        assert "70" in text or "140" in text  # narrative references target range
+
+    def test_food_section_handles_missing_food_items(self) -> None:
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            nutrition_json=json.dumps(
+                {"carbs_g": 40, "proteins_g": 10, "fats_g": 5, "gi_estimate": 50, "notes": ""}
+            )
+        )
+        text = service._build_section_text(analysis, "food")
+        assert "Food" in text
+        assert "40" in text
+
+    # ── Phase 5 / US3: Glucose section (T027) ────────────────────────────────
+
+    def test_glucose_section_contains_range_and_curve_label(self) -> None:
+        """Glucose Chart section includes mg/dL values, range status, and curve labels (T027)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            glucose_curve_json=json.dumps(
+                [
+                    {
+                        "timing_label": "fasting",
+                        "estimated_value_mg_dl": 85,
+                        "in_range": True,
+                        "notes": "",
+                        "curve_shape_label": "stable within range",
+                    },
+                    {
+                        "timing_label": "2h after",
+                        "estimated_value_mg_dl": 160,
+                        "in_range": False,
+                        "notes": "spike",
+                        "curve_shape_label": "sharp spike with recovery",
+                    },
+                ]
+            )
+        )
+        text = service._build_section_text(analysis, "glucose")
+        assert "mg/dL" in text
+        assert "in range" in text.lower() or "✅" in text
+        assert "out of range" in text.lower() or "⚠️" in text
+        assert "stable within range" in text
+        assert "sharp spike with recovery" in text
+
+    def test_glucose_section_cgm_unparseable_shows_advisory(self) -> None:
+        """When CGM is unparseable, glucose section shows 'unreadable' advisory (T027)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            glucose_curve_json=json.dumps([]),
+            raw_response=json.dumps(
+                {
+                    "cgm_parseable": False,
+                    "cgm_parse_error": "Screenshot too blurry",
+                }
+            ),
+        )
+        text = service._build_section_text(analysis, "glucose")
+        assert "unreadable" in text.lower() or "CGM" in text
+
+    # ── Phase 6 / US4: Correlation section (T030) ────────────────────────────
+
+    def test_correlation_section_includes_spikes_and_summary(self) -> None:
+        """Correlation section renders spikes, dips, stable zones, and summary (T030)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            correlation_json=json.dumps(
+                {
+                    "spikes": [
+                        "Rice caused spike at 1h",
+                        "Dessert contributed to 2h elevation",
+                    ],
+                    "dips": ["Walk after meal lowered glucose"],
+                    "stable_zones": ["Fasting was stable"],
+                    "summary": "The rice meal caused the primary spike; the walk helped attenuate it.",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "correlation")
+        assert "Rice caused spike at 1h" in text
+        assert "Walk after meal lowered glucose" in text
+        assert "Fasting was stable" in text
+        assert "rice meal" in text.lower() or "summary" in text.lower() or "attenuate" in text.lower()
+
+    def test_correlation_section_skips_empty_lists(self) -> None:
+        """Correlation section does not show empty spike/dip headers."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            correlation_json=json.dumps(
+                {
+                    "spikes": [],
+                    "dips": [],
+                    "stable_zones": [],
+                    "summary": "All good with pasta meal.",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "correlation")
+        # No "Spikes:" or "Dips:" heading when lists are empty
+        assert "Spikes:" not in text
+        assert "All good with pasta meal." in text
+
+    # ── Phase 7 / US5: Recommendations section (T033) ────────────────────────
+
+    def test_recommendations_section_formats_list(self) -> None:
+        """Recommendations section renders items in priority order (T033)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            recommendations_json=json.dumps(
+                [
+                    {"priority": 3, "text": "Third priority suggestion for pasta"},
+                    {"priority": 1, "text": "Top priority suggestion for pasta"},
+                    {"priority": 2, "text": "Second priority suggestion for pasta"},
+                ]
+            )
+        )
+        text = service._build_section_text(analysis, "recommendations")
+        # Items must appear in priority order
+        pos_1 = text.find("Top priority")
+        pos_2 = text.find("Second priority")
+        pos_3 = text.find("Third priority")
+        assert pos_1 < pos_2 < pos_3, "Recommendations must be sorted by priority"
+
+    def test_recommendations_section_fallback_empty(self) -> None:
+        """Recommendations section shows fallback message when list is empty."""
+        service = _make_service()
+        analysis = self._make_analysis_with(recommendations_json=json.dumps([]))
+        text = service._build_section_text(analysis, "recommendations")
+        assert "No specific recommendations" in text
+
+    # ── Phase 8 / Activity section (T036) ────────────────────────────────────
+
+    def test_activity_section_no_activity(self) -> None:
+        """Activity section shows 'No activity logged' when description is null (T036)."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            activity_json=json.dumps(
+                {
+                    "description": None,
+                    "glucose_modulation": "No activity logged.",
+                    "effect_summary": "No activity to analyse.",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "activity")
+        assert "Activity" in text
+        assert "No activity logged" in text
+
+    def test_activity_section_with_activity(self) -> None:
+        """Activity section shows activity details when description is present."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            activity_json=json.dumps(
+                {
+                    "description": "45-min jog",
+                    "glucose_modulation": "Significant glucose reduction post-run",
+                    "effect_summary": "Levels dropped to baseline 30 min earlier",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "activity")
+        assert "45-min jog" in text
+        assert "glucose" in text.lower() or "reduction" in text.lower()
+
+    def test_activity_section_null_activity_json(self) -> None:
+        """Activity section handles activity_json=None gracefully."""
+        service = _make_service()
+        analysis = self._make_analysis_with(activity_json=None)
+        text = service._build_section_text(analysis, "activity")
+        assert "Activity" in text
+        assert "No activity logged" in text
+
+    def test_section_fallback_on_invalid_json(self) -> None:
+        """Any section with invalid JSON falls back to 'Analysis unavailable' message."""
+        service = _make_service()
+        analysis = self._make_analysis_with(nutrition_json="not-valid-json")
+        text = service._build_section_text(analysis, "food")
+        assert "unavailable" in text.lower() or "Analysis" in text

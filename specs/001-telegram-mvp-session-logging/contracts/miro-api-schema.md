@@ -3,9 +3,15 @@
 **Feature**: 001-telegram-mvp-session-logging | **Date**: 2026-04-17
 **API**: Miro REST API v2 | **Auth**: Developer access token (Bearer)
 
+> **Note (feature 002)**: The enhanced card format implemented in feature 002 supersedes the
+> single-card approach below. `create_enhanced_session_card()` now creates a **frame** containing
+> uploaded food/CGM images and five analysis sticky-note sections. See
+> `specs/002-enhanced-miro-card/contracts/` for the updated schema. The endpoints below describe
+> the original 001 implementation and are retained for historical reference.
+
 ---
 
-## Create Session Analysis Card
+## Create Session Analysis Card (original — superseded by feature 002)
 
 **Endpoint**: `POST https://api.miro.com/v2/boards/{board_id}/cards`
 
