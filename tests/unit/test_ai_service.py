@@ -50,7 +50,7 @@ VALID_ANALYSIS = {
 def _make_service(max_calls: int = 10, max_tokens: int = 4000) -> AIService:
     return AIService(
         api_key="test-key",
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_calls_per_user_per_day=max_calls,
         max_tokens_per_session=max_tokens,
     )

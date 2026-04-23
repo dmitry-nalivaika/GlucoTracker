@@ -263,7 +263,7 @@ class SandboxWorkflow:
             "ai_analysis",
             api_label,
             {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-sonnet-4-6",
                 "food_photos": len(food_entries),
                 "cgm_screenshots": len(cgm_entries),
                 "activity_notes": len(activity_entries),
@@ -408,7 +408,7 @@ class SandboxWorkflow:
             return MockAIService(latency_seconds=0.5)
 
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        model = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         if not api_key:
             await self._emit(
                 "config_error",

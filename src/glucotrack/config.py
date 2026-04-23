@@ -21,9 +21,7 @@ class Settings(BaseSettings):
 
     # Anthropic (required)
     anthropic_api_key: str = Field(..., description="Anthropic API key")
-    anthropic_model: str = Field(
-        default="claude-3-5-sonnet-20241022", description="Claude model identifier"
-    )
+    anthropic_model: str = Field(default="claude-sonnet-4-6", description="Claude model identifier")
 
     # Miro (required)
     miro_access_token: str = Field(..., description="Miro developer access token")
