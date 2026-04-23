@@ -123,7 +123,7 @@ def fmt_analysis_result(analysis: AIAnalysis) -> str:
         "",
         "*Nutrition Estimate*",
         f"Carbs: {carbs}g \\| Protein: {proteins}g \\| Fat: {fats}g",
-        f"Glycaemic Index estimate: ~{gi}",
+        f"Glycaemic Index estimate: \\~{gi}",
     ]
     if nutrition_notes:
         lines.append(f"_{_escape(nutrition_notes)}_")

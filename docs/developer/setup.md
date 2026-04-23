@@ -64,6 +64,7 @@ alembic upgrade head
 ## 5. Run the bot
 
 ```bash
+source .venv/bin/activate         # activate venv first — `python` is not on system PATH
 python -m glucotrack              # starts Telegram long-polling
 ```
 
