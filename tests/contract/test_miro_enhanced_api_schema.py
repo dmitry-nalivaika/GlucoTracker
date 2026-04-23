@@ -229,6 +229,86 @@ class TestMiroEnhancedAPISchemaContract:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_sticky_note_style_has_no_textcolor(self) -> None:
+        """Sticky note style must NOT include textColor — invalid Miro field → 400."""
+        service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
+        analysis = _make_analysis()
+        captured_styles: list[dict] = []
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/frames").mock(
+            return_value=httpx.Response(
+                201, json={"id": "frame-style-test", "type": "frame", "data": {}, "links": {}}
+            )
+        )
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-style-test"}},
+            )
+        )
+
+        def capture_sticky(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if "style" in body:
+                captured_styles.append(body["style"])
+            return httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/sticky_notes").mock(
+            side_effect=capture_sticky
+        )
+
+        await service.create_enhanced_session_card(
+            analysis=analysis, session_images=_session_images()
+        )
+
+        assert len(captured_styles) >= 1, "No sticky notes captured"
+        for style in captured_styles:
+            assert "textColor" not in style, (
+                f"'textColor' is not a valid Miro sticky note style field — got: {style}"
+            )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_sticky_note_position_has_no_relativeto(self) -> None:
+        """Sticky note position must not include relativeTo — invalid for sticky notes."""
+        service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
+        analysis = _make_analysis()
+        captured_positions: list[dict] = []
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/frames").mock(
+            return_value=httpx.Response(
+                201, json={"id": "frame-pos-test", "type": "frame", "data": {}, "links": {}}
+            )
+        )
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-pos-test"}},
+            )
+        )
+
+        def capture_sticky(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if "position" in body:
+                captured_positions.append(body["position"])
+            return httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+
+        respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/sticky_notes").mock(
+            side_effect=capture_sticky
+        )
+
+        await service.create_enhanced_session_card(
+            analysis=analysis, session_images=_session_images()
+        )
+
+        assert len(captured_positions) >= 1, "No sticky notes captured"
+        for pos in captured_positions:
+            assert "relativeTo" not in pos, (
+                f"'relativeTo' in sticky note position causes API rejection — got: {pos}"
+            )
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_returns_frame_id(self) -> None:
         """create_enhanced_session_card returns the frame ID from step 1."""
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())

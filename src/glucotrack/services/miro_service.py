@@ -37,9 +37,10 @@ _IMAGE_X_STEP = 300
 _IMAGE_Y_START = 100
 
 # Section colour palette (feature 002)
-_STYLE_SEPARATOR = {"fillColor": "#e6e6e6", "textColor": "#333333"}
-_STYLE_SECTION = {"fillColor": "#f7f7f7", "textColor": "#1a1a1a"}
-_STYLE_PLACEHOLDER = {"fillColor": "#fff3cd", "textColor": "#856404"}
+# Miro sticky notes only accept fillColor, textAlign, textAlignVertical — no textColor
+_STYLE_SEPARATOR = {"fillColor": "#e6e6e6"}
+_STYLE_SECTION = {"fillColor": "#f7f7f7"}
+_STYLE_PLACEHOLDER = {"fillColor": "#fff3cd"}
 
 
 class MiroError(Exception):
@@ -230,11 +231,13 @@ class MiroService:
 
         Returns image item ID on success, None on failure (FR-011).
         """
-        x_pos = _IMAGE_X_STEP * idx + 20
+        # Miro uses origin:center — convert left-edge start to center coordinate
+        x_center = _IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2
+        y_center = _IMAGE_Y_START + _IMAGE_HEIGHT // 2
         data_field = json.dumps(
             {
                 "title": f"{image['type']}_{idx + 1}",
-                "position": {"x": x_pos, "y": _IMAGE_Y_START, "relativeTo": "parent_top_left"},
+                "position": {"x": x_center, "y": y_center},
                 "geometry": {"width": _IMAGE_WIDTH},
                 "parent": {"id": frame_id},
             }
@@ -317,7 +320,7 @@ class MiroService:
         payload: dict[str, Any] = {
             "data": {"content": content, "shape": "rectangle"},
             "style": style,
-            "position": {**position, "relativeTo": "parent_top_left"},
+            "position": position,
             "geometry": geometry,
             "parent": {"id": frame_id},
         }
@@ -511,14 +514,15 @@ class MiroService:
         for idx, image in enumerate(ordered_images):
             img_id = await self._upload_image(frame_id=frame_id, image=image, idx=idx)
             if img_id is None:
-                # FR-011: add placeholder sticky note at the same position
-                x_pos = _IMAGE_X_STEP * idx + 20
+                # FR-011: add placeholder sticky note at the same (center) position
+                x_center = _IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2
+                y_center = _IMAGE_Y_START + _IMAGE_HEIGHT // 2
                 try:
                     await self._add_sticky_note(
                         frame_id=frame_id,
                         content="⚠️ Image unavailable\n(upload failed)",
                         style=_STYLE_PLACEHOLDER,
-                        position={"x": x_pos, "y": _IMAGE_Y_START},
+                        position={"x": x_center, "y": y_center},
                         geometry={"width": _IMAGE_WIDTH, "height": _IMAGE_HEIGHT},
                     )
                 except MiroError as exc:
