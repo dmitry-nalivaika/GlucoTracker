@@ -320,7 +320,7 @@ class MiroService:
         payload: dict[str, Any] = {
             "data": {"content": content, "shape": "rectangle"},
             "style": style,
-            "position": position,
+            "position": {**position, "relativeTo": "parent_top_left"},
             "geometry": geometry,
             "parent": {"id": frame_id},
         }

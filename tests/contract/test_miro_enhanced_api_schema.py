@@ -269,8 +269,8 @@ class TestMiroEnhancedAPISchemaContract:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_sticky_note_position_has_no_relativeto(self) -> None:
-        """Sticky note position must not include relativeTo — invalid for sticky notes."""
+    async def test_sticky_note_position_uses_parent_top_left(self) -> None:
+        """Sticky note position must use relativeTo=parent_top_left for frame-relative coords."""
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
         analysis = _make_analysis()
         captured_positions: list[dict] = []
@@ -303,8 +303,8 @@ class TestMiroEnhancedAPISchemaContract:
 
         assert len(captured_positions) >= 1, "No sticky notes captured"
         for pos in captured_positions:
-            assert "relativeTo" not in pos, (
-                f"'relativeTo' in sticky note position causes API rejection — got: {pos}"
+            assert pos.get("relativeTo") == "parent_top_left", (
+                f"Sticky notes must use relativeTo=parent_top_left for frame-relative coords — got: {pos}"
             )
 
     @pytest.mark.asyncio
