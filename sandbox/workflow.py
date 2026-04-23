@@ -296,6 +296,7 @@ class SandboxWorkflow:
             {"action": "save_analysis"},
         )
         t2 = time.perf_counter()
+        activity_data = ai_result.get("activity")
         analysis = await analysis_repo.save_analysis(
             user_id=SANDBOX_USER_ID,
             session_id=completed.id,
@@ -305,6 +306,7 @@ class SandboxWorkflow:
             recommendations=ai_result.get("recommendations", []),
             within_target_notes=ai_result.get("target_range_note"),
             raw_response=json.dumps(ai_result),
+            activity_json=json.dumps(activity_data) if activity_data is not None else None,
         )
         await db.commit()
         await self._db_result(
@@ -346,25 +348,44 @@ class SandboxWorkflow:
         await self._step_start("miro_card")
         miro_label = "Miro API (MOCK)" if self._miro_mode == "mock" else "Miro API (REAL)"
         board_id = getattr(miro_service, "board_id", "unknown")
+        # Build session_images for feature 002 enhanced card
+        session_images: list[dict[str, Any]] = [
+            {
+                "type": "food",
+                "file_bytes": FOOD_PHOTO_BYTES,
+                "telegram_file_id": FOOD_TELEGRAM_FILE_ID,
+            },
+            {
+                "type": "cgm",
+                "file_bytes": CGM_SCREENSHOT_BYTES,
+                "telegram_file_id": CGM_TELEGRAM_FILE_ID,
+            },
+        ]
         await self._api_request(
             "miro_card",
             miro_label,
             {
-                "action": "POST /boards/{board_id}/cards",
+                "action": "POST /boards/{board_id}/frames (enhanced)",
                 "board_id": board_id,
+                "images": len(session_images),
                 "mode": self._miro_mode,
             },
         )
         t = time.perf_counter()
         try:
-            card_id = await miro_service.create_session_card(analysis=analysis)
+            if hasattr(miro_service, "create_enhanced_session_card"):
+                card_id = await miro_service.create_enhanced_session_card(
+                    analysis=analysis, session_images=session_images
+                )
+            else:
+                card_id = await miro_service.create_session_card(analysis=analysis)
             await self._api_response(
                 "miro_card",
                 miro_label,
-                {"card_id": card_id, "status": 201},
+                {"frame_id": card_id, "status": 201},
                 t,
             )
-            await self._step_success("miro_card", {"card_id": card_id})
+            await self._step_success("miro_card", {"frame_id": card_id})
         except Exception as exc:
             await self._api_response(
                 "miro_card",
