@@ -26,16 +26,16 @@ _DEFAULT_RETRY_DELAYS: tuple[float, ...] = (1.0, 2.0, 4.0)
 
 # ── Enhanced card layout constants ────────────────────────────────────────────
 _FRAME_WIDTH = 1200
-_IMAGE_WIDTH = 280
-_IMAGE_HEIGHT = 280
-_IMAGES_PER_ROW = 4
-_IMAGE_ROW_HEIGHT = 320
-_SECTION_HEIGHT = 250  # minimum spacing between section centres (auto-height may be larger)
-_SECTION_GAP = 20
-_SECTION_INITIAL_GAP = 180  # extra y-offset: separator → first section, clears image area
-_SECTION_WIDTH = 1160
-_IMAGE_X_STEP = 300
-_IMAGE_Y_START = 100
+_IMAGE_WIDTH = 560  # two large images side-by-side
+_IMAGE_HEIGHT = 400
+_IMAGES_PER_ROW = 2
+_IMAGE_ROW_HEIGHT = 450
+_IMAGE_Y_START = 40
+_IMAGE_X_STEP = 600  # column stride: 0→x=300, 1→x=900
+_SECTION_COLS = 2  # 2-column sticky note grid
+_SECTION_WIDTH = 540  # half-frame-width notes (~540px per column)
+_SECTION_HEIGHT = 280  # row-to-row spacing between section centres
+_SECTION_GAP = 30
 
 # Section colour palette (feature 002)
 # Miro StickyNoteStyle.fillColor is a STRICT ENUM — only named values accepted.
@@ -193,7 +193,8 @@ class MiroService:
         Raises MiroError on unrecoverable failure.
         """
         n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
-        section_block = _SECTION_INITIAL_GAP + 6 * (_SECTION_HEIGHT + _SECTION_GAP)
+        n_section_rows = 3  # fixed 2×3 grid: (food|glucose), (recs|correlation), (activity|header)
+        section_block = n_section_rows * (_SECTION_HEIGHT + _SECTION_GAP)
         frame_height = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + section_block + 60
 
         url = f"{_MIRO_API_BASE}/boards/{self._board_id}/frames"
@@ -538,42 +539,47 @@ class MiroService:
                 except MiroError as exc:
                     logger.warning("Failed to add image placeholder: %s", exc)
 
-        # Step 3: Add separator and 5 analysis sections
+        # Step 3: Add 5 analysis sections + header in a 2-column × 3-row grid
+        # Layout: food | glucose  /  recommendations | correlation  /  activity | header
         section_y_start = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + 20
+        col_centers = [
+            _FRAME_WIDTH * (2 * c + 1) // (2 * _SECTION_COLS) for c in range(_SECTION_COLS)
+        ]  # [300, 900] for a 1200px frame split into 2 columns
 
-        # Separator — x=600 centres it horizontally in the 1200px-wide frame
-        try:
-            await self._add_sticky_note(
-                frame_id=frame_id,
-                content="─── Analysis ───────────────────────",
-                style=_STYLE_SEPARATOR,
-                position={"x": 600, "y": section_y_start},
-                geometry={"width": _SECTION_WIDTH},
-            )
-        except MiroError as exc:
-            logger.warning("Failed to add separator: %s", exc)
+        section_grid = [
+            # (section_name_or_sentinel, row, col)
+            ("food", 0, 0),
+            ("glucose", 0, 1),
+            ("recommendations", 1, 0),
+            ("correlation", 1, 1),
+            ("activity", 2, 0),
+            ("_header", 2, 1),  # analysis header / separator note
+        ]
 
-        # 5 analysis sections — start _SECTION_INITIAL_GAP below separator so sections
-        # don't expand upward into the image area (images end at ~y=380, separator at ~y=440)
-        section_names = ["food", "activity", "glucose", "correlation", "recommendations"]
-        y_offset = section_y_start + _SECTION_INITIAL_GAP
-
-        for section_name in section_names:
-            try:
-                content = self._build_section_text(analysis, section_name)
-            except Exception:
-                content = "Analysis unavailable for this section — please re-submit your session."
+        for section_name, row, col in section_grid:
+            x = col_centers[col]
+            y = section_y_start + row * (_SECTION_HEIGHT + _SECTION_GAP)
+            if section_name == "_header":
+                content = "─── Analysis ───────────────────────"
+                style = _STYLE_SEPARATOR
+            else:
+                try:
+                    content = self._build_section_text(analysis, section_name)
+                except Exception:
+                    content = (
+                        "Analysis unavailable for this section" " — please re-submit your session."
+                    )
+                style = _STYLE_SECTION
             try:
                 await self._add_sticky_note(
                     frame_id=frame_id,
                     content=content,
-                    style=_STYLE_SECTION,
-                    position={"x": 600, "y": y_offset},
+                    style=style,
+                    position={"x": x, "y": y},
                     geometry={"width": _SECTION_WIDTH},
                 )
             except MiroError as exc:
                 logger.warning("Failed to add section '%s': %s", section_name, exc)
-            y_offset += _SECTION_HEIGHT + _SECTION_GAP
 
         logger.info("Enhanced Miro card complete: frame=%s analysis=%s", frame_id, analysis.id)
         return frame_id
