@@ -33,7 +33,7 @@ class TestClaudeAPISchemaContract:
     async def test_request_uses_correct_model(self) -> None:
         service = AIService(
             api_key="test",
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_calls_per_user_per_day=10,
             max_tokens_per_session=4000,
         )
@@ -54,13 +54,13 @@ class TestClaudeAPISchemaContract:
                 load_file_bytes=AsyncMock(return_value=b"img"),
             )
 
-        assert captured["model"] == "claude-3-5-sonnet-20241022"
+        assert captured["model"] == "claude-sonnet-4-6"
 
     @pytest.mark.asyncio
     async def test_request_has_system_prompt(self) -> None:
         service = AIService(
             api_key="test",
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_calls_per_user_per_day=10,
             max_tokens_per_session=4000,
         )
@@ -88,7 +88,7 @@ class TestClaudeAPISchemaContract:
     async def test_max_tokens_set_in_request(self) -> None:
         service = AIService(
             api_key="test",
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_calls_per_user_per_day=10,
             max_tokens_per_session=4000,
         )

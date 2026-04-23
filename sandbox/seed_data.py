@@ -1,14 +1,25 @@
 """Synthetic test data for sandbox workflow execution.
 
 All values are realistic but fictional — no real user data.
+
+Image bytes are loaded from sandbox/assets/ (generated PNG files that the real
+Claude vision API can analyse).  If the asset files are missing (e.g. in CI
+without the pre-generated assets), we fall back to a minimal 1×1 JPEG so the
+storage and DB pipeline can still be exercised without real photos.
+
+To (re-)generate the assets run:
+    python -m sandbox.generate_test_images
 """
 
 from __future__ import annotations
 
-# Minimal valid 1×1 JPEG (55 bytes).
-# The mock AI ignores image content; the real AI would see a solid-color pixel.
-# Adequate for exercising the full storage/DB pipeline without real photos.
-FAKE_JPEG_BYTES: bytes = bytes(
+from pathlib import Path
+
+_ASSETS = Path(__file__).parent / "assets"
+
+# Minimal valid 1×1 JPEG — kept as a fallback for CI / environments without
+# the pre-generated PNG assets.  The fake bytes are intentionally small.
+_FAKE_JPEG_BYTES: bytes = bytes(
     [
         0xFF,
         0xD8,
@@ -162,9 +173,17 @@ FAKE_JPEG_BYTES: bytes = bytes(
     ]
 )
 
-# Reuse the same bytes for both entries (sandbox only needs valid bytes, not real images)
-FOOD_PHOTO_BYTES: bytes = FAKE_JPEG_BYTES
-CGM_SCREENSHOT_BYTES: bytes = FAKE_JPEG_BYTES
+
+def _load_asset(filename: str) -> bytes:
+    """Load a pre-generated PNG asset, falling back to the minimal fake JPEG."""
+    path = _ASSETS / filename
+    if path.exists():
+        return path.read_bytes()
+    return _FAKE_JPEG_BYTES
+
+
+FOOD_PHOTO_BYTES: bytes = _load_asset("food_test.png")
+CGM_SCREENSHOT_BYTES: bytes = _load_asset("cgm_test.png")
 
 # Synthetic user identifiers
 SANDBOX_USER_ID: int = 999_000_001

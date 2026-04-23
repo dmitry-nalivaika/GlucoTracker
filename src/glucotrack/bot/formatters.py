@@ -90,7 +90,7 @@ def fmt_insufficient_entries(food: int, cgm: int) -> str:
 
 
 def fmt_analysis_result(analysis: AIAnalysis) -> str:
-    """Format a structured 4-section analysis message for Telegram MarkdownV2."""
+    """Format a structured analysis message for Telegram MarkdownV2."""
     nutrition = json.loads(analysis.nutrition_json)
     glucose_curve = json.loads(analysis.glucose_curve_json)
     correlation = json.loads(analysis.correlation_json)
@@ -123,10 +123,29 @@ def fmt_analysis_result(analysis: AIAnalysis) -> str:
         "",
         "*Nutrition Estimate*",
         f"Carbs: {carbs}g \\| Protein: {proteins}g \\| Fat: {fats}g",
-        f"Glycaemic Index estimate: ~{gi}",
+        f"Glycaemic Index estimate: \\~{gi}",
     ]
     if nutrition_notes:
         lines.append(f"_{_escape(nutrition_notes)}_")
+
+    # Activity section (FR-010) — shown when activity_json is present
+    if analysis.activity_json:
+        try:
+            activity = json.loads(analysis.activity_json)
+            description = activity.get("description")
+            modulation = activity.get("glucose_modulation", "")
+            effect = activity.get("effect_summary", "")
+            lines += ["", "*Activity*"]
+            if description:
+                lines.append(_escape(description))
+            else:
+                lines.append("No activity logged")
+            if modulation and modulation != "No activity logged.":
+                lines.append(_escape(modulation))
+            if effect and effect != "No activity to analyse.":
+                lines.append(_escape(effect))
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     lines += ["", "*Glucose Curve*"]
     lines.extend(curve_lines or ["  _No data available_"])

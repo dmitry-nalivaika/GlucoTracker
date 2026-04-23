@@ -31,6 +31,7 @@ class AIAnalysis(Base):  # type: ignore[misc]
     correlation_json: Mapped[str] = mapped_column(Text, nullable=False)
     recommendations_json: Mapped[str] = mapped_column(Text, nullable=False)
     within_target_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activity_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_response: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

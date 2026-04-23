@@ -18,6 +18,7 @@ def _make_analysis(
     fats: int = 12,
     gi: int = 70,
     notes: str = "",
+    activity_json: str | None = None,
 ) -> MagicMock:
     analysis = MagicMock()
     analysis.nutrition_json = json.dumps(
@@ -55,6 +56,7 @@ def _make_analysis(
         ]
     )
     analysis.within_target_notes = "One reading above 140 mg/dL."
+    analysis.activity_json = activity_json
     return analysis
 
 
@@ -133,3 +135,40 @@ class TestFormatters:
         assert "3" in text
         assert "2" in text
         assert "1" in text
+
+    # ── Activity section tests (T011, feature 002) ───────────────────────────
+
+    def test_fmt_analysis_result_shows_activity_section_when_present(self) -> None:
+        """Activity section appears when activity_json is set (FR-010)."""
+        activity = json.dumps(
+            {
+                "description": "30-min brisk walk",
+                "glucose_modulation": "reduced post-meal spike",
+                "effect_summary": "moderate lowering effect",
+            }
+        )
+        text = formatters.fmt_analysis_result(_make_analysis(activity_json=activity))
+        assert "Activity" in text
+        assert "30-min brisk walk" in text or "walk" in text.lower()
+
+    def test_fmt_analysis_result_omits_activity_section_when_none(self) -> None:
+        """Activity section is absent when activity_json is None (backward compat)."""
+        text = formatters.fmt_analysis_result(_make_analysis(activity_json=None))
+        # Should not raise; must still contain the four original sections
+        assert "Nutrition" in text
+        assert "Glucose" in text
+        assert "Correlation" in text
+        assert "Recommendations" in text
+
+    def test_fmt_analysis_result_no_activity_logged_message(self) -> None:
+        """When activity has null description, show 'No activity' message."""
+        activity = json.dumps(
+            {
+                "description": None,
+                "glucose_modulation": "No activity logged.",
+                "effect_summary": "No activity to analyse.",
+            }
+        )
+        text = formatters.fmt_analysis_result(_make_analysis(activity_json=activity))
+        assert "Activity" in text
+        assert "No activity" in text

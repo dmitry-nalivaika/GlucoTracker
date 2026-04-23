@@ -50,7 +50,7 @@ VALID_ANALYSIS = {
 def _make_service(max_calls: int = 10, max_tokens: int = 4000) -> AIService:
     return AIService(
         api_key="test-key",
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_calls_per_user_per_day=max_calls,
         max_tokens_per_session=max_tokens,
     )
@@ -225,3 +225,147 @@ class TestAIService:
             )
 
         assert captured_kwargs.get("max_tokens") == 2000
+
+    @pytest.mark.asyncio
+    async def test_jpeg_bytes_produce_image_jpeg_media_type(self) -> None:
+        """JPEG image bytes (FF D8 prefix) must yield media_type image/jpeg."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture(**kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        # Minimal valid JPEG magic bytes
+        jpeg_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+
+        with patch.object(service._client.messages, "create", new=capture):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=jpeg_bytes),
+            )
+
+        messages = captured_kwargs["messages"]
+        image_blocks = [b for b in messages[0]["content"] if b.get("type") == "image"]
+        for block in image_blocks:
+            assert block["source"]["media_type"] == "image/jpeg"
+
+    @pytest.mark.asyncio
+    async def test_png_bytes_produce_image_png_media_type(self) -> None:
+        """PNG image bytes (\\x89PNG prefix) must yield media_type image/png."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture(**kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        # PNG magic bytes
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+        with patch.object(service._client.messages, "create", new=capture):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=png_bytes),
+            )
+
+        messages = captured_kwargs["messages"]
+        image_blocks = [b for b in messages[0]["content"] if b.get("type") == "image"]
+        for block in image_blocks:
+            assert block["source"]["media_type"] == "image/png"
+
+    # ── Markdown stripping tests ───────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_json_in_backtick_json_fence_is_parsed(self) -> None:
+        """Response wrapped in ```json ... ``` must be parsed correctly."""
+        service = _make_service()
+        wrapped = f"```json\n{json.dumps(VALID_ANALYSIS)}\n```"
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=wrapped)]
+
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
+            result = await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=b"img"),
+            )
+
+        assert result["nutrition"]["carbs_g"] == 45
+
+    @pytest.mark.asyncio
+    async def test_json_in_plain_backtick_fence_is_parsed(self) -> None:
+        """Response wrapped in ``` ... ``` (no language tag) must be parsed."""
+        service = _make_service()
+        wrapped = f"```\n{json.dumps(VALID_ANALYSIS)}\n```"
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=wrapped)]
+
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
+            result = await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=b"img"),
+            )
+
+        assert result["nutrition"]["carbs_g"] == 45
+
+    @pytest.mark.asyncio
+    async def test_json_with_preamble_text_is_parsed(self) -> None:
+        """Response with leading prose before the JSON object must be parsed."""
+        service = _make_service()
+        raw = "Here is the analysis:\n\n" + json.dumps(VALID_ANALYSIS)
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=raw)]
+
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
+            result = await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=b"img"),
+            )
+
+        assert result["nutrition"]["carbs_g"] == 45
+
+    @pytest.mark.asyncio
+    async def test_truly_invalid_response_raises_analysis_error(self) -> None:
+        """A response with no JSON object at all must still raise AnalysisError."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Sorry, I cannot analyse this image.")]
+
+        with patch.object(
+            service._client.messages, "create", new=AsyncMock(return_value=mock_response)
+        ):
+            with pytest.raises(AnalysisError):
+                await service.analyse_session(
+                    user_id=1,
+                    food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                    cgm_entries=[
+                        {"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}
+                    ],
+                    activity_entries=[],
+                    load_file_bytes=AsyncMock(return_value=b"img"),
+                )

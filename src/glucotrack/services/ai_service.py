@@ -30,26 +30,39 @@ exactly this structure (no markdown, pure JSON):
     "proteins_g": <number or null>,
     "fats_g": <number or null>,
     "gi_estimate": <number 0-100 or null>,
+    "gi_category": "<'low' | 'medium' | 'high' | null: GI category based on gi_estimate>",
+    "food_items": ["<identified food item 1>", "<food item 2>"],
+    "glucose_impact_narrative": "<2-3 sentences explaining expected glucose impact, \
+must explicitly reference the 70-140 mg/dL target range>",
     "notes": "<string>"
+  },
+  "activity": {
+    "description": "<string: what activity was logged, or null if none>",
+    "glucose_modulation": "<string: how this activity affects glucose response; \
+use 'No activity logged.' when description is null>",
+    "effect_summary": "<string: overall effect observed or expected; \
+use 'No activity to analyse.' when description is null>"
   },
   "glucose_curve": [
     {
       "timing_label": "<string>",
       "estimated_value_mg_dl": <number or null>,
       "in_range": <boolean: true if value is 70-140 mg/dL, else false, null if unknown>,
-      "notes": "<string>"
+      "notes": "<string>",
+      "curve_shape_label": "<descriptive label e.g. 'sharp spike with recovery', \
+'stable within range', 'gradual rise', 'gradual rise with plateau'>"
     }
   ],
   "correlation": {
-    "spikes": ["<string>"],
-    "dips": ["<string>"],
-    "stable_zones": ["<string>"],
-    "summary": "<string>"
+    "spikes": ["<cause-effect statement explicitly naming food or activity>"],
+    "dips": ["<cause-effect statement>"],
+    "stable_zones": ["<explanation>"],
+    "summary": "<2+ sentences with explicit references to foods or activities from this session>"
   },
   "recommendations": [
     {
       "priority": <1-5 integer>,
-      "text": "<actionable recommendation>"
+      "text": "<session-specific actionable suggestion referencing the meal or activity by name>"
     }
   ],
   "target_range_note": "<string: summary of 70-140 mg/dL compliance>",
@@ -58,7 +71,72 @@ exactly this structure (no markdown, pure JSON):
 }
 
 The healthy glucose target range is 70–140 mg/dL. Explicitly note any readings \
-outside this range. If the CGM screenshot is unreadable, set cgm_parseable=false."""
+outside this range. If the CGM screenshot is unreadable, set cgm_parseable=false. \
+gi_category MUST be 'low' (GI < 55), 'medium' (GI 55-69), 'high' (GI >= 70), or null. \
+When no activity was logged, set activity.description to null."""
+
+
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _detect_media_type(data: bytes) -> str:
+    """Return MIME type for image bytes based on magic header."""
+    if data[:8] == _PNG_MAGIC:
+        return "image/png"
+    return "image/jpeg"
+
+
+def _extract_json(text: str) -> str:
+    """Extract the JSON object from a Claude response.
+
+    Claude may wrap the JSON in markdown code fences (```json...``` or ```...```)
+    or prefix it with prose.  We try three strategies in order:
+
+    1. Direct parse (fast-path: response is already clean JSON).
+    2. Strip a markdown code fence and return the inner content.
+    3. Find the first ``{`` … last ``}`` substring (handles preamble text).
+
+    Returns the best candidate string so the caller can attempt json.loads().
+    If none of the heuristics produce a valid JSON string the original text is
+    returned so the caller's JSONDecodeError reports the full raw content.
+    """
+    stripped = text.strip()
+
+    # Fast-path: already valid JSON
+    try:
+        json.loads(stripped)
+        return stripped
+    except json.JSONDecodeError:
+        pass
+
+    # Strip ```json ... ``` or ``` ... ``` fences
+    if stripped.startswith("```"):
+        # Remove the opening fence line (```json or ```)
+        lines = stripped.splitlines()
+        # Drop first and last lines if they are fence markers
+        inner_lines = lines[1:]
+        if inner_lines and inner_lines[-1].strip() == "```":
+            inner_lines = inner_lines[:-1]
+        candidate = "\n".join(inner_lines).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Find first { … last } in the text (handles leading prose)
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end > start:
+        candidate = stripped[start : end + 1]
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Give up — return original so the caller logs the full raw text
+    return text
 
 
 class AnalysisError(Exception):
@@ -152,7 +230,11 @@ class AIService:
             content.append(
                 {
                     "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                    "source": {
+                        "type": "base64",
+                        "media_type": _detect_media_type(image_bytes),
+                        "data": b64,
+                    },
                 }
             )
 
@@ -163,7 +245,11 @@ class AIService:
             content.append(
                 {
                     "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                    "source": {
+                        "type": "base64",
+                        "media_type": _detect_media_type(image_bytes),
+                        "data": b64,
+                    },
                 }
             )
 
@@ -182,7 +268,7 @@ class AIService:
         first_block = response.content[0]
         raw_text: str = getattr(first_block, "text", "")  # TextBlock has .text; others do not
         try:
-            result: dict[str, Any] = json.loads(raw_text)
+            result: dict[str, Any] = json.loads(_extract_json(raw_text))
             return result
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse Claude response as JSON: %s", raw_text[:200])

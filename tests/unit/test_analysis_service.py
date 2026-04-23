@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -59,6 +60,7 @@ class TestAnalysisService:
             chat_id=12345,
             bot=mock_bot,
         )
+        await asyncio.sleep(0.1)  # let background Miro task complete before teardown
 
         analysis_repo = AnalysisRepository(test_db)
         analysis = await analysis_repo.get_analysis_by_session(
@@ -99,6 +101,7 @@ class TestAnalysisService:
             chat_id=12345,
             bot=mock_bot,
         )
+        await asyncio.sleep(0.1)  # let background Miro task complete before teardown
 
         assert mock_bot.send_message.called
 

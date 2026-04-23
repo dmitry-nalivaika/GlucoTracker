@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from glucotrack.models.session import SessionStatus
+from glucotrack.repositories.analysis_repository import AnalysisRepository
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.repositories.user_repository import UserRepository
 
@@ -173,3 +176,52 @@ class TestSessionRepository:
         assert counts["food"] == 1
         assert counts["cgm"] == 1
         assert counts["activity"] == 0
+
+
+class TestAnalysisRepository:
+    """Tests for AnalysisRepository — feature 002 additions."""
+
+    @pytest.mark.asyncio
+    async def test_save_analysis_persists_activity_json(
+        self, test_db, sample_user, sample_session
+    ):
+        """save_analysis() accepts and persists activity_json (T002)."""
+        repo = AnalysisRepository(test_db)
+        activity = {
+            "description": "30-min walk",
+            "glucose_modulation": "reduced spike",
+            "effect_summary": "moderate lowering",
+        }
+        analysis = await repo.save_analysis(
+            user_id=sample_user.telegram_user_id,
+            session_id=sample_session.id,
+            nutrition={"carbs_g": 45},
+            glucose_curve=[{"timing_label": "1h", "estimated_value_mg_dl": 130}],
+            correlation={"summary": "stable"},
+            recommendations=[{"priority": 1, "text": "walk after meals"}],
+            within_target_notes=None,
+            raw_response="{}",
+            activity_json=json.dumps(activity),
+        )
+        assert analysis.activity_json is not None
+        persisted = json.loads(analysis.activity_json)
+        assert persisted["description"] == "30-min walk"
+        assert persisted["glucose_modulation"] == "reduced spike"
+
+    @pytest.mark.asyncio
+    async def test_save_analysis_activity_json_defaults_to_none(
+        self, test_db, sample_user, sample_session
+    ):
+        """save_analysis() activity_json defaults to None for backward compat."""
+        repo = AnalysisRepository(test_db)
+        analysis = await repo.save_analysis(
+            user_id=sample_user.telegram_user_id,
+            session_id=sample_session.id,
+            nutrition={"carbs_g": 30},
+            glucose_curve=[],
+            correlation={"summary": "ok"},
+            recommendations=[],
+            within_target_notes=None,
+            raw_response="{}",
+        )
+        assert analysis.activity_json is None

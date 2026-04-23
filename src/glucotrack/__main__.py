@@ -24,13 +24,11 @@ def main() -> None:
 
     settings = get_settings()
 
-    async def run() -> None:
-        await init_db(settings.database_url)
-        app = create_application(settings)
-        logger.info("Starting GlucoTrack bot in polling mode...")
-        await app.run_polling(drop_pending_updates=True)
+    asyncio.run(init_db(settings.database_url))
 
-    asyncio.run(run())
+    app = create_application(settings)
+    logger.info("Starting GlucoTrack bot in polling mode...")
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ class TestSettings:
         monkeypatch.delenv("SESSION_IDLE_EXPIRY_HOURS", raising=False)
         monkeypatch.delenv("SESSION_DISAMBIGUATE_TIMEOUT_HOURS", raising=False)
         s = Settings(**self._base_env())  # type: ignore[arg-type]
-        assert s.anthropic_model == "claude-3-5-sonnet-20241022"
+        assert s.anthropic_model == "claude-sonnet-4-6"
         assert s.storage_root == "./data"
         assert s.session_idle_threshold_minutes == 30
         assert s.session_idle_expiry_hours == 24

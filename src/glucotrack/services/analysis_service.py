@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from telegram.constants import ParseMode
@@ -108,6 +109,28 @@ class AnalysisService:
                     )
                     return b""
 
+            # Collect session images for enhanced Miro card (feature 002)
+            # Food first (FR-002), then CGM
+            session_images: list[dict[str, Any]] = []
+            for entry in food_entries:
+                file_bytes = await load_file_bytes(str(entry["telegram_file_id"]))
+                session_images.append(
+                    {
+                        "type": "food",
+                        "file_bytes": file_bytes,
+                        "telegram_file_id": str(entry["telegram_file_id"]),
+                    }
+                )
+            for entry in cgm_entries:
+                file_bytes = await load_file_bytes(str(entry["telegram_file_id"]))
+                session_images.append(
+                    {
+                        "type": "cgm",
+                        "file_bytes": file_bytes,
+                        "telegram_file_id": str(entry["telegram_file_id"]),
+                    }
+                )
+
             try:
                 result = await self._ai.analyse_session(
                     user_id=user_id,
@@ -135,6 +158,7 @@ class AnalysisService:
                 return
 
             # Persist analysis
+            activity_data = result.get("activity")
             analysis = await self._analysis_repo.save_analysis(
                 user_id=user_id,
                 session_id=session_id,
@@ -144,6 +168,7 @@ class AnalysisService:
                 recommendations=result.get("recommendations", []),
                 within_target_notes=result.get("target_range_note"),
                 raw_response=json.dumps(result),
+                activity_json=json.dumps(activity_data) if activity_data is not None else None,
             )
             await self._db.commit()
 
@@ -175,7 +200,9 @@ class AnalysisService:
 
             # Fire-and-forget Miro card creation (FR-009: Miro failure must not block)
             if self._miro is not None and miro_card is not None:
-                asyncio.create_task(self._create_miro_card_safe(analysis, miro_card.id))
+                asyncio.create_task(
+                    self._create_miro_card_safe(analysis, miro_card.id, session_images)
+                )
 
         except Exception as exc:
             logger.exception("Unexpected error in run_analysis (session=%s): %s", session_id, exc)
@@ -188,16 +215,44 @@ class AnalysisService:
             except Exception:
                 pass
 
-    async def _create_miro_card_safe(self, analysis: Any, miro_card_id: str) -> None:
+    async def _create_miro_card_safe(
+        self,
+        analysis: Any,
+        miro_card_id: str,
+        session_images: list[dict[str, Any]] | None = None,
+    ) -> None:
         """Call Miro API; log outcome but never raise (FR-009).
+
+        Uses create_enhanced_session_card (feature 002) when available,
+        falling back to create_session_card for older MiroService versions.
 
         MiroCard record was already persisted by run_analysis — this
         background task only performs the network call and logs the result.
-        DB status update is best-effort to avoid racing with session lifecycle.
         """
         try:
-            card_id = await self._miro.create_session_card(analysis=analysis)
+            if session_images is not None and hasattr(self._miro, "create_enhanced_session_card"):
+                card_id = await self._miro.create_enhanced_session_card(
+                    analysis=analysis, session_images=session_images
+                )
+            else:
+                card_id = await self._miro.create_session_card(analysis=analysis)
             logger.info("Miro card created: %s (record=%s)", card_id, miro_card_id)
+            # Best-effort status update — non-fatal if session is closing
+            try:
+                result = await self._db.execute(
+                    select(MiroCard).where(
+                        and_(MiroCard.id == miro_card_id, MiroCard.user_id == analysis.user_id)
+                    )
+                )
+                miro_card = result.scalar_one_or_none()
+                if miro_card is not None:
+                    miro_card.status = MiroCardStatus.CREATED
+                    miro_card.miro_card_id = card_id if isinstance(card_id, str) else None
+                    await self._db.commit()
+            except SQLAlchemyError as db_exc:
+                logger.warning("Failed to update MiroCard status: %s", db_exc)
+            except Exception as db_exc:
+                logger.warning("Unexpected error updating MiroCard status: %s", db_exc)
         except Exception as exc:
             logger.error(
                 "Miro card creation failed (non-blocking, record=%s): %s", miro_card_id, exc

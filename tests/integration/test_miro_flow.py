@@ -9,23 +9,46 @@ Miro failure must NOT affect Telegram delivery.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import respx
 
+from glucotrack.models.base import new_uuid
+from glucotrack.models.miro import MiroCard, MiroCardSourceType, MiroCardStatus
+from glucotrack.models.user import User
 from glucotrack.repositories.session_repository import SessionRepository
 from glucotrack.services.analysis_service import AnalysisService
 from glucotrack.services.miro_service import MiroService
 
 ANALYSIS_RESULT = {
-    "nutrition": {"carbs_g": 50, "proteins_g": 25, "fats_g": 12, "gi_estimate": 70, "notes": ""},
+    "nutrition": {
+        "carbs_g": 50,
+        "proteins_g": 25,
+        "fats_g": 12,
+        "gi_estimate": 70,
+        "gi_category": "high",
+        "food_items": ["pasta"],
+        "glucose_impact_narrative": "High-GI meal stays within 70–140 mg/dL range.",
+        "notes": "",
+    },
+    "activity": {
+        "description": None,
+        "glucose_modulation": "No activity logged.",
+        "effect_summary": "No activity to analyse.",
+    },
     "glucose_curve": [
-        {"timing_label": "1h after", "estimated_value_mg_dl": 110, "in_range": True, "notes": ""}
+        {
+            "timing_label": "1h after",
+            "estimated_value_mg_dl": 110,
+            "in_range": True,
+            "notes": "",
+            "curve_shape_label": "stable within range",
+        }
     ],
-    "correlation": {"spikes": [], "dips": [], "stable_zones": [], "summary": "Stable"},
-    "recommendations": [{"priority": 1, "text": "Maintain pattern"}],
+    "correlation": {"spikes": [], "dips": [], "stable_zones": [], "summary": "Stable with pasta"},
+    "recommendations": [{"priority": 1, "text": "Maintain current pattern with pasta"}],
     "target_range_note": "All within range.",
     "cgm_parseable": True,
     "cgm_parse_error": None,
@@ -48,10 +71,22 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
+        # Feature 002: mock the enhanced endpoints (frame + images + sticky notes)
+        respx.post("https://api.miro.com/v2/boards/test-board/frames").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "miro-card-001", "type": "card", "data": {}},
+                json={"id": "frame-001", "type": "frame", "data": {}, "links": {}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-001"}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
+            return_value=httpx.Response(
+                201, json={"id": "sn-001", "type": "sticky_note", "data": {}}
             )
         )
 
@@ -95,8 +130,18 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
+        # Feature 002: 500 on the frames endpoint (so all retries fail, Miro error is swallowed)
+        respx.post("https://api.miro.com/v2/boards/test-board/frames").mock(
             return_value=httpx.Response(500, json={"message": "server error"})
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "f"}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
+            return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
         )
 
         mock_ai = AsyncMock()
@@ -126,3 +171,61 @@ class TestMiroFlow:
 
         # Telegram delivery must succeed regardless of Miro failure
         assert mock_bot.send_message.called
+
+    @pytest.mark.asyncio
+    async def test_miro_card_status_update_scoped_by_user_id(
+        self, test_db, sample_user
+    ) -> None:
+        """MiroCard status update must include user_id predicate — Constitution II IDOR guard.
+
+        Scenario: user A's analysis triggers _create_miro_card_safe, but the
+        miro_card_id belongs to user B.  Without the user_id filter the bug
+        query finds user B's row and sets status=CREATED (IDOR violation).
+        With the fix the query returns None and user B's row stays PENDING.
+        """
+        # Create a second user (user B, telegram_user_id=999)
+        other_user = User(telegram_user_id=999)
+        test_db.add(other_user)
+        await test_db.commit()
+        await test_db.refresh(other_user)
+
+        # Create a MiroCard owned by user B
+        other_card = MiroCard(
+            id=new_uuid(),
+            user_id=other_user.telegram_user_id,
+            source_type=MiroCardSourceType.ANALYSIS,
+            source_id=new_uuid(),
+            miro_board_id="board-1",
+            status=MiroCardStatus.PENDING,
+        )
+        test_db.add(other_card)
+        await test_db.commit()
+        await test_db.refresh(other_card)
+
+        # Build analysis belonging to user A (sample_user.telegram_user_id = 100)
+        mock_analysis = MagicMock()
+        mock_analysis.user_id = sample_user.telegram_user_id  # 100 ≠ 999
+
+        mock_miro = AsyncMock()
+        mock_miro.create_enhanced_session_card = AsyncMock(return_value="frame-xyz")
+
+        service = AnalysisService(
+            db=test_db,
+            ai_service=AsyncMock(),
+            miro_service=mock_miro,
+            storage_root="./data",
+        )
+
+        # Call with user A's analysis but user B's miro_card_id
+        await service._create_miro_card_safe(
+            analysis=mock_analysis,
+            miro_card_id=other_card.id,
+            session_images=[],
+        )
+
+        # User B's card must NOT have been updated (Constitution II)
+        await test_db.refresh(other_card)
+        assert other_card.status == MiroCardStatus.PENDING, (
+            f"Constitution II IDOR: MiroCard for user {other_user.telegram_user_id} "
+            f"was mutated by a request from user {sample_user.telegram_user_id}"
+        )

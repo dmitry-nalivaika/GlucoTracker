@@ -19,7 +19,17 @@ MOCK_ANALYSIS_RESPONSE: dict[str, Any] = {
         "proteins_g": 28,
         "fats_g": 12,
         "gi_estimate": 58,
+        "gi_category": "medium",
+        "food_items": ["steamed rice", "grilled chicken breast", "broccoli"],
+        "glucose_impact_narrative": (
+            "Mixed plate GI ~58 expected to raise glucose to 130–148 mg/dL range."
+        ),
         "notes": "Mixed plate — steamed rice, grilled chicken breast, broccoli with olive oil",
+    },
+    "activity": {
+        "description": "15-min pre-meal walk",
+        "glucose_modulation": "reduced post-meal peak by ~10 mg/dL",
+        "effect_summary": "moderate lowering",
     },
     "glucose_curve": [
         {
@@ -27,18 +37,21 @@ MOCK_ANALYSIS_RESPONSE: dict[str, Any] = {
             "estimated_value_mg_dl": 92,
             "in_range": True,
             "notes": "Normal fasting level, well within 70–140 range",
+            "curve_shape_label": "stable within range",
         },
         {
             "timing_label": "1h_post_meal",
             "estimated_value_mg_dl": 148,
             "in_range": False,
             "notes": "Moderate post-meal spike, 8 mg/dL above upper threshold",
+            "curve_shape_label": "sharp rise above range",
         },
         {
             "timing_label": "2h_post_meal",
             "estimated_value_mg_dl": 118,
             "in_range": True,
             "notes": "Returning to normal range — good recovery trajectory",
+            "curve_shape_label": "gradual decline back to range",
         },
     ],
     "correlation": {
@@ -116,10 +129,25 @@ class MockMiroService:
         self.board_id = "mock_board_SANDBOX123"
 
     async def create_session_card(self, analysis: Any) -> str:
-        """Return a fake card ID after simulated latency."""
+        """Return a fake card ID after simulated latency (legacy fallback)."""
         await asyncio.sleep(self._latency)
         logger.debug("MockMiroService: returning mock card id for analysis=%s", analysis.id)
         return "mock_card_XYZ789"
+
+    async def create_enhanced_session_card(
+        self,
+        analysis: Any,
+        session_images: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Return a fake frame ID after simulated latency (feature 002)."""
+        await asyncio.sleep(self._latency)
+        img_count = len(session_images) if session_images else 0
+        logger.debug(
+            "MockMiroService: returning mock frame id for analysis=%s (images=%d)",
+            analysis.id,
+            img_count,
+        )
+        return "mock_frame_SANDBOX_002"
 
 
 class MockTelegramBot:
