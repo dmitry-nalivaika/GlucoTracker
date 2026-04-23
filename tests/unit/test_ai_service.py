@@ -225,3 +225,61 @@ class TestAIService:
             )
 
         assert captured_kwargs.get("max_tokens") == 2000
+
+    @pytest.mark.asyncio
+    async def test_jpeg_bytes_produce_image_jpeg_media_type(self) -> None:
+        """JPEG image bytes (FF D8 prefix) must yield media_type image/jpeg."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture(**kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        # Minimal valid JPEG magic bytes
+        jpeg_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+
+        with patch.object(service._client.messages, "create", new=capture):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=jpeg_bytes),
+            )
+
+        messages = captured_kwargs["messages"]
+        image_blocks = [b for b in messages[0]["content"] if b.get("type") == "image"]
+        for block in image_blocks:
+            assert block["source"]["media_type"] == "image/jpeg"
+
+    @pytest.mark.asyncio
+    async def test_png_bytes_produce_image_png_media_type(self) -> None:
+        """PNG image bytes (\\x89PNG prefix) must yield media_type image/png."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture(**kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        # PNG magic bytes
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+        with patch.object(service._client.messages, "create", new=capture):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=png_bytes),
+            )
+
+        messages = captured_kwargs["messages"]
+        image_blocks = [b for b in messages[0]["content"] if b.get("type") == "image"]
+        for block in image_blocks:
+            assert block["source"]["media_type"] == "image/png"

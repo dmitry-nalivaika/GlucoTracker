@@ -76,6 +76,16 @@ gi_category MUST be 'low' (GI < 55), 'medium' (GI 55-69), 'high' (GI >= 70), or 
 When no activity was logged, set activity.description to null."""
 
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _detect_media_type(data: bytes) -> str:
+    """Return MIME type for image bytes based on magic header."""
+    if data[:8] == _PNG_MAGIC:
+        return "image/png"
+    return "image/jpeg"
+
+
 class AnalysisError(Exception):
     """Raised when Claude API call fails after retries."""
 
@@ -167,7 +177,11 @@ class AIService:
             content.append(
                 {
                     "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                    "source": {
+                        "type": "base64",
+                        "media_type": _detect_media_type(image_bytes),
+                        "data": b64,
+                    },
                 }
             )
 
@@ -178,7 +192,11 @@ class AIService:
             content.append(
                 {
                     "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                    "source": {
+                        "type": "base64",
+                        "media_type": _detect_media_type(image_bytes),
+                        "data": b64,
+                    },
                 }
             )
 

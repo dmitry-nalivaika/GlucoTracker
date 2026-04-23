@@ -272,6 +272,8 @@ class SandboxWorkflow:
         )
 
         async def _load_file_bytes(fid: str) -> bytes:
+            if fid == CGM_TELEGRAM_FILE_ID:
+                return CGM_SCREENSHOT_BYTES
             return FOOD_PHOTO_BYTES
 
         t = time.perf_counter()
