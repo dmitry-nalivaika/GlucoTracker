@@ -20,12 +20,32 @@ from glucotrack.services.analysis_service import AnalysisService
 from glucotrack.services.miro_service import MiroService
 
 ANALYSIS_RESULT = {
-    "nutrition": {"carbs_g": 50, "proteins_g": 25, "fats_g": 12, "gi_estimate": 70, "notes": ""},
+    "nutrition": {
+        "carbs_g": 50,
+        "proteins_g": 25,
+        "fats_g": 12,
+        "gi_estimate": 70,
+        "gi_category": "high",
+        "food_items": ["pasta"],
+        "glucose_impact_narrative": "High-GI meal stays within 70–140 mg/dL range.",
+        "notes": "",
+    },
+    "activity": {
+        "description": None,
+        "glucose_modulation": "No activity logged.",
+        "effect_summary": "No activity to analyse.",
+    },
     "glucose_curve": [
-        {"timing_label": "1h after", "estimated_value_mg_dl": 110, "in_range": True, "notes": ""}
+        {
+            "timing_label": "1h after",
+            "estimated_value_mg_dl": 110,
+            "in_range": True,
+            "notes": "",
+            "curve_shape_label": "stable within range",
+        }
     ],
-    "correlation": {"spikes": [], "dips": [], "stable_zones": [], "summary": "Stable"},
-    "recommendations": [{"priority": 1, "text": "Maintain pattern"}],
+    "correlation": {"spikes": [], "dips": [], "stable_zones": [], "summary": "Stable with pasta"},
+    "recommendations": [{"priority": 1, "text": "Maintain current pattern with pasta"}],
     "target_range_note": "All within range.",
     "cgm_parseable": True,
     "cgm_parse_error": None,
@@ -48,10 +68,22 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
+        # Feature 002: mock the enhanced endpoints (frame + images + sticky notes)
+        respx.post("https://api.miro.com/v2/boards/test-board/frames").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "miro-card-001", "type": "card", "data": {}},
+                json={"id": "frame-001", "type": "frame", "data": {}, "links": {}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-001"}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
+            return_value=httpx.Response(
+                201, json={"id": "sn-001", "type": "sticky_note", "data": {}}
             )
         )
 
@@ -95,8 +127,18 @@ class TestMiroFlow:
         )
         await sess_repo.complete_session(sample_user.telegram_user_id, sample_session.id)
 
-        respx.post("https://api.miro.com/v2/boards/test-board/cards").mock(
+        # Feature 002: 500 on the frames endpoint (so all retries fail, Miro error is swallowed)
+        respx.post("https://api.miro.com/v2/boards/test-board/frames").mock(
             return_value=httpx.Response(500, json={"message": "server error"})
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/images").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "f"}},
+            )
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
+            return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
         )
 
         mock_ai = AsyncMock()

@@ -1,4 +1,4 @@
-"""Unit tests for MiroService — T042.
+"""Unit tests for MiroService — T042 / T014.
 
 httpx requests are mocked with respx; no real network calls.
 """
@@ -6,7 +6,7 @@ httpx requests are mocked with respx; no real network calls.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -21,16 +21,45 @@ def _make_analysis(user_id: int = 1) -> MagicMock:
     analysis.user_id = user_id
     analysis.session_id = "session-uuid-001"
     analysis.nutrition_json = json.dumps(
-        {"carbs_g": 50, "proteins_g": 25, "fats_g": 12, "gi_estimate": 70, "notes": ""}
+        {
+            "carbs_g": 50,
+            "proteins_g": 25,
+            "fats_g": 12,
+            "gi_estimate": 70,
+            "gi_category": "high",
+            "food_items": ["pasta", "salad"],
+            "glucose_impact_narrative": "High-GI meal expected to raise glucose within 70–140 mg/dL.",
+            "notes": "",
+        }
     )
     analysis.glucose_curve_json = json.dumps(
-        [{"timing_label": "1h after", "estimated_value_mg_dl": 120, "in_range": True, "notes": ""}]
+        [
+            {
+                "timing_label": "1h after",
+                "estimated_value_mg_dl": 120,
+                "in_range": True,
+                "notes": "",
+                "curve_shape_label": "gradual rise",
+            }
+        ]
     )
     analysis.correlation_json = json.dumps(
-        {"spikes": [], "dips": [], "stable_zones": ["1h after"], "summary": "Stable"}
+        {
+            "spikes": ["Pasta likely caused 1h spike"],
+            "dips": [],
+            "stable_zones": ["1h after"],
+            "summary": "Stable with moderate spike from pasta",
+        }
     )
     analysis.recommendations_json = json.dumps(
-        [{"priority": 1, "text": "Maintain current eating pattern"}]
+        [{"priority": 1, "text": "Maintain current eating pattern with pasta"}]
+    )
+    analysis.activity_json = json.dumps(
+        {
+            "description": "20-min walk",
+            "glucose_modulation": "walk reduced spike",
+            "effect_summary": "moderate lowering observed",
+        }
     )
     analysis.within_target_notes = "All within range."
     analysis.created_at = MagicMock()
@@ -209,3 +238,235 @@ class TestMiroService:
         await service.create_session_card(analysis=analysis)
 
         assert captured_request.headers.get("authorization") == "Bearer test-miro-token"
+
+
+def _make_session_images(n_food: int = 1, n_cgm: int = 1) -> list[dict]:
+    images = []
+    for i in range(n_food):
+        images.append(
+            {
+                "type": "food",
+                "file_bytes": f"food_bytes_{i}".encode(),
+                "telegram_file_id": f"tg_food_{i}",
+            }
+        )
+    for i in range(n_cgm):
+        images.append(
+            {
+                "type": "cgm",
+                "file_bytes": f"cgm_bytes_{i}".encode(),
+                "telegram_file_id": f"tg_cgm_{i}",
+            }
+        )
+    return images
+
+
+class TestMiroServiceEnhancedCard:
+    """Unit tests for create_enhanced_session_card() — feature 002 (T014)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_frame_first(self) -> None:
+        """Frame POST is called before any image POST."""
+        service = _make_service()
+        analysis = _make_analysis()
+        call_order: list[str] = []
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            call_order.append("frame")
+            return "frame-first-test"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            call_order.append("image")
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            call_order.append("sticky")
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis, session_images=_make_session_images(1, 1)
+            )
+
+        assert call_order[0] == "frame", "Frame must be created first"
+        assert "image" in call_order, "Image upload must be called"
+        assert call_order.index("frame") < call_order.index("image")
+
+    @pytest.mark.asyncio
+    async def test_uploads_food_photos_before_cgm(self) -> None:
+        """Food images are uploaded before CGM screenshots (FR-002)."""
+        service = _make_service()
+        analysis = _make_analysis()
+        upload_types: list[str] = []
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-order-test"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            upload_types.append(image["type"])
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis,
+                session_images=_make_session_images(n_food=2, n_cgm=1),
+            )
+
+        # All food images must appear before the first cgm image
+        if "cgm" in upload_types:
+            first_cgm = upload_types.index("cgm")
+            for i in range(first_cgm):
+                assert upload_types[i] == "food", (
+                    f"Expected food at position {i}, got {upload_types[i]}"
+                )
+
+    @pytest.mark.asyncio
+    async def test_image_failure_adds_placeholder(self) -> None:
+        """When image upload returns None (failure), a placeholder sticky note is added (FR-011)."""
+        service = _make_service()
+        analysis = _make_analysis()
+        sticky_contents: list[str] = []
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-placeholder-test"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            return None  # Simulate upload failure for all images
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            sticky_contents.append(content)
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis, session_images=_make_session_images(1, 1)
+            )
+
+        # At least one placeholder sticky note for the failed uploads
+        placeholder_texts = [c for c in sticky_contents if "unavailable" in c.lower() or "failed" in c.lower()]
+        assert len(placeholder_texts) >= 1, (
+            f"Expected placeholder sticky notes for failed uploads, got: {sticky_contents}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_all_five_sections_created(self) -> None:
+        """Six sticky note calls are made: separator + 5 analysis sections."""
+        service = _make_service()
+        analysis = _make_analysis()
+        sticky_call_count = 0
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-sections-test"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            nonlocal sticky_call_count
+            sticky_call_count += 1
+            return f"sticky-{sticky_call_count}"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis, session_images=_make_session_images(1, 1)
+            )
+
+        # 1 separator + 5 sections = 6 sticky notes (plus any image placeholders)
+        assert sticky_call_count >= 6, (
+            f"Expected ≥6 sticky note calls (separator + 5 sections), got {sticky_call_count}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_frame_id(self) -> None:
+        """create_enhanced_session_card returns the frame ID from _create_frame."""
+        service = _make_service()
+        analysis = _make_analysis()
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "expected-frame-id"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            result = await service.create_enhanced_session_card(
+                analysis=analysis, session_images=_make_session_images(1, 1)
+            )
+
+        assert result == "expected-frame-id"
+
+    @pytest.mark.asyncio
+    async def test_card_not_blocked_by_single_image_failure(self) -> None:
+        """Card creation continues when one image upload fails (FR-011)."""
+        service = _make_service()
+        analysis = _make_analysis()
+        upload_calls: list[str] = []
+        sticky_call_count = 0
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-resilience-test"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            upload_calls.append(image["telegram_file_id"])
+            if idx == 0:
+                return None  # First image fails
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            nonlocal sticky_call_count
+            sticky_call_count += 1
+            return f"sticky-{sticky_call_count}"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis, session_images=_make_session_images(n_food=2, n_cgm=1)
+            )
+
+        # Both images were attempted (not aborted after first failure)
+        assert len(upload_calls) == 3, f"Expected 3 upload attempts, got {len(upload_calls)}"
+        # All 5 sections + separator still created
+        assert sticky_call_count >= 6, (
+            f"Expected ≥6 sticky notes despite image failure, got {sticky_call_count}"
+        )
