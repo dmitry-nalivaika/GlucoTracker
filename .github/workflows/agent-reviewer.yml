@@ -45,4 +45,4 @@ jobs:
             End your review with either APPROVED or CHANGES REQUESTED.
 
             You MUST NOT fix code. You MUST NOT approve if any BLOCKER items remain.
-          claude_args: "--max-turns 20"
+          claude_args: "--max-turns 40"
