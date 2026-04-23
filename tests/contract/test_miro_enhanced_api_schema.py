@@ -270,12 +270,12 @@ class TestMiroEnhancedAPISchemaContract:
     @pytest.mark.asyncio
     @respx.mock
     async def test_sticky_note_position_has_no_relativeto(self) -> None:
-        """Sticky note position must NOT include relativeTo.
+        """Sticky note position must NOT include relativeTo, and must use frame-relative coords.
 
-        Miro's PositionChange schema only has x and y (canvas-absolute coords).
-        relativeTo is not a valid field and would be silently ignored, leaving
-        notes at canvas x=600 (right edge of a 1200px frame) — invisible inside
-        the frame.  Canvas coordinates are computed explicitly from frame dimensions.
+        PositionChange schema has no relativeTo field. When parent.id is set, Miro
+        treats x,y as frame-relative (from frame top-left, item center at x,y) —
+        the same convention as the multipart image upload endpoint. Coordinates
+        must be positive and within the 1200px-wide frame.
         """
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
         analysis = _make_analysis()
@@ -310,8 +310,12 @@ class TestMiroEnhancedAPISchemaContract:
         assert len(captured_positions) >= 1, "No sticky notes captured"
         for pos in captured_positions:
             assert "relativeTo" not in pos, (
-                f"Sticky notes must not include relativeTo (unsupported in PositionChange schema) — got: {pos}"
+                f"Sticky notes must not include relativeTo (unsupported field) — got: {pos}"
             )
+            # Frame-relative coords: x=600 centres horizontally in 1200px frame, y > 0
+            assert pos.get("x", 0) > 0, f"Expected positive frame-relative x — got: {pos}"
+            assert pos.get("y", 0) > 0, f"Expected positive frame-relative y — got: {pos}"
+            assert pos.get("x", 0) <= 1200, f"x must be within frame width 1200 — got: {pos}"
 
     @pytest.mark.asyncio
     @respx.mock

@@ -506,21 +506,11 @@ class MiroService:
         )
         logger.info("Created Miro frame %s for analysis %s", frame_id, analysis.id)
 
-        # Compute frame half-dimensions for canvas coordinate conversion.
-        # The frame is always placed at canvas (0, 0) with origin: center, so
-        # canvas_coord = frame_relative_from_topleft - frame_half_dimension.
-        # Miro's PositionChange schema only has x/y (canvas-absolute); there is no
-        # relativeTo field, so we must convert frame-relative coords manually.
+        # When an item has parent.id, Miro treats position x,y as frame-relative
+        # (measured from the frame's top-left corner with origin: center for the item),
+        # matching the same convention used by the multipart image upload endpoint.
         # FixedRatioNoRotationGeometry accepts EITHER width OR height, not both.
         n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
-        section_block = 6 * (_SECTION_HEIGHT + _SECTION_GAP)
-        frame_height = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + section_block + 60
-        frame_half_h = frame_height / 2
-        frame_half_w = _FRAME_WIDTH / 2  # 600.0
-
-        def _canvas(frame_x: float, frame_y: float) -> dict[str, float]:
-            """Convert frame-relative (top-left origin) coords to canvas coords."""
-            return {"x": frame_x - frame_half_w, "y": frame_y - frame_half_h}
 
         # Step 2: Upload images (food first, then CGM)
         food_images = [img for img in session_images if img.get("type") == "food"]
@@ -530,15 +520,15 @@ class MiroService:
         for idx, image in enumerate(ordered_images):
             img_id = await self._upload_image(frame_id=frame_id, image=image, idx=idx)
             if img_id is None:
-                # FR-011: add placeholder sticky note at the image's frame-relative position
-                x_frame = float(_IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2)
-                y_frame = float(_IMAGE_Y_START + _IMAGE_HEIGHT // 2)
+                # FR-011: placeholder sticky note at the image's frame-relative position
+                x_center = _IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2
+                y_center = _IMAGE_Y_START + _IMAGE_HEIGHT // 2
                 try:
                     await self._add_sticky_note(
                         frame_id=frame_id,
                         content="⚠️ Image unavailable\n(upload failed)",
                         style=_STYLE_PLACEHOLDER,
-                        position=_canvas(x_frame, y_frame),
+                        position={"x": x_center, "y": y_center},
                         geometry={"width": _IMAGE_WIDTH},
                     )
                 except MiroError as exc:
@@ -547,13 +537,13 @@ class MiroService:
         # Step 3: Add separator and 5 analysis sections
         section_y_start = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + 20
 
-        # Separator — horizontally centred (frame_x=600 = half of 1200px frame width)
+        # Separator — x=600 centres it horizontally in the 1200px-wide frame
         try:
             await self._add_sticky_note(
                 frame_id=frame_id,
                 content="─── Analysis ───────────────────────",
                 style=_STYLE_SEPARATOR,
-                position=_canvas(600, section_y_start),
+                position={"x": 600, "y": section_y_start},
                 geometry={"width": _SECTION_WIDTH},
             )
         except MiroError as exc:
@@ -573,7 +563,7 @@ class MiroService:
                     frame_id=frame_id,
                     content=content,
                     style=_STYLE_SECTION,
-                    position=_canvas(600, y_offset),
+                    position={"x": 600, "y": y_offset},
                     geometry={"width": _SECTION_WIDTH},
                 )
             except MiroError as exc:
