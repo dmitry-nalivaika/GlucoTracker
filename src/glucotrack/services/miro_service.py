@@ -36,6 +36,10 @@ _SECTION_COLS = 2  # 2-column sticky note grid
 _SECTION_WIDTH = 540  # half-frame-width notes (~540px per column)
 _SECTION_HEIGHT = 280  # row-to-row spacing between section centres
 _SECTION_GAP = 30
+# Padding from the bottom of the last image row to the first sticky note centre.
+# Must be large enough that the sticky top edge (centre − ~150px half-height) clears
+# the image bottom, even for tall/portrait images capped at _IMAGE_HEIGHT.
+_SECTION_TOP_MARGIN = 180
 
 # Section colour palette (feature 002)
 # Miro StickyNoteStyle.fillColor is a STRICT ENUM — only named values accepted.
@@ -195,7 +199,13 @@ class MiroService:
         n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
         n_section_rows = 3  # fixed 2×3 grid: (food|glucose), (recs|correlation), (activity|header)
         section_block = n_section_rows * (_SECTION_HEIGHT + _SECTION_GAP)
-        frame_height = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + section_block + 60
+        frame_height = (
+            _IMAGE_Y_START
+            + n_image_rows * _IMAGE_ROW_HEIGHT
+            + _SECTION_TOP_MARGIN
+            + section_block
+            + 100  # bottom margin below last sticky note
+        )
 
         url = f"{_MIRO_API_BASE}/boards/{self._board_id}/frames"
         headers = {
@@ -245,7 +255,10 @@ class MiroService:
             {
                 "title": f"{image['type']}_{idx + 1}",
                 "position": {"x": x_center, "y": y_center},
-                "geometry": {"width": _IMAGE_WIDTH},
+                # Use height constraint so portrait images (e.g. CGM screenshots) never
+                # overflow into the sticky note rows below.  Width is auto-calculated by
+                # Miro from the image's actual aspect ratio.
+                "geometry": {"height": _IMAGE_HEIGHT},
                 "parent": {"id": frame_id},
             }
         )
@@ -541,7 +554,7 @@ class MiroService:
 
         # Step 3: Add 5 analysis sections + header in a 2-column × 3-row grid
         # Layout: food | glucose  /  recommendations | correlation  /  activity | header
-        section_y_start = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + 20
+        section_y_start = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + _SECTION_TOP_MARGIN
         col_centers = [
             _FRAME_WIDTH * (2 * c + 1) // (2 * _SECTION_COLS) for c in range(_SECTION_COLS)
         ]  # [300, 900] for a 1200px frame split into 2 columns

@@ -475,6 +475,88 @@ class TestMiroServiceEnhancedCard:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_upload_image_uses_height_geometry(self) -> None:
+        """_upload_image must constrain by height (not width) to prevent portrait overflow."""
+        import re
+
+        from glucotrack.services.miro_service import _IMAGE_HEIGHT
+
+        service = MiroService(access_token="t", board_id="b", _retry_delays=())
+        captured_geometry: list[dict] = []
+
+        def capture(request: httpx.Request) -> httpx.Response:
+            match = re.search(rb'"geometry"\s*:\s*(\{[^}]+\})', request.content)
+            if match:
+                captured_geometry.append(json.loads(match.group(1)))
+            return httpx.Response(201, json={"id": "img-id"})
+
+        respx.post("https://api.miro.com/v2/boards/b/images").mock(side_effect=capture)
+
+        await service._upload_image(
+            frame_id="frame-1",
+            image={"type": "cgm", "file_bytes": b"fake", "telegram_file_id": "f"},
+            idx=0,
+        )
+
+        assert captured_geometry, "No geometry captured from request"
+        geom = captured_geometry[0]
+        assert "height" in geom, f"Expected height-constrained geometry, got: {geom}"
+        assert "width" not in geom, f"Width must not be set when height is used, got: {geom}"
+        assert geom["height"] == _IMAGE_HEIGHT
+
+    @pytest.mark.asyncio
+    async def test_sticky_section_start_below_image_bottom(self) -> None:
+        """First sticky note y-center must be far enough below image bottom to avoid overlap."""
+        import math
+
+        from glucotrack.services.miro_service import (
+            _IMAGE_HEIGHT,
+            _IMAGE_ROW_HEIGHT,
+            _IMAGE_Y_START,
+            _IMAGES_PER_ROW,
+        )
+
+        service = _make_service()
+        analysis = _make_analysis()
+        sticky_positions: list[dict] = []
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-id"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            return "img-id"
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            sticky_positions.append(position)
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis,
+                session_images=_make_session_images(n_food=1, n_cgm=1),
+            )
+
+        n_images = 2
+        n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW)
+        image_bottom = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT
+        # Sticky center must be at least 120px below image bottom (leaves room for sticky top edge)
+        min_sticky_y = image_bottom + 120
+        for pos in sticky_positions:
+            assert pos["y"] >= min_sticky_y, (
+                f"Sticky y={pos['y']} is too close to image bottom {image_bottom} "
+                f"(min required: {min_sticky_y})"
+            )
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_upload_image_x_within_frame_for_idx_2(self) -> None:
         """_upload_image with idx=2 must produce x_center within frame width."""
         import re
