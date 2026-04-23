@@ -432,6 +432,83 @@ class TestMiroServiceEnhancedCard:
         assert result == "expected-frame-id"
 
     @pytest.mark.asyncio
+    async def test_image_placeholder_positions_within_frame_width(self) -> None:
+        """Placeholder x-positions for 3+ images must all be within frame width (no overflow)."""
+        from glucotrack.services.miro_service import _FRAME_WIDTH
+
+        service = _make_service()
+        analysis = _make_analysis()
+        placeholder_positions: list[dict] = []
+
+        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+            return "frame-id"
+
+        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+            return None  # All uploads fail → placeholders created for each
+
+        async def mock_add_sticky_note(
+            frame_id: str, content: str, style: dict, position: dict, geometry: dict
+        ) -> str:
+            if "unavailable" in content.lower():
+                placeholder_positions.append(position)
+            return "sticky-id"
+
+        with (
+            patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
+            patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
+        ):
+            await service.create_enhanced_session_card(
+                analysis=analysis,
+                session_images=_make_session_images(n_food=2, n_cgm=1),  # 3 images → idx 0,1,2
+            )
+
+        assert len(placeholder_positions) == 3, (
+            f"Expected 3 placeholder sticky notes, got {len(placeholder_positions)}"
+        )
+        for i, pos in enumerate(placeholder_positions):
+            assert pos["x"] <= _FRAME_WIDTH, (
+                f"Placeholder {i} x={pos['x']} exceeds frame width {_FRAME_WIDTH}"
+            )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_upload_image_x_within_frame_for_idx_2(self) -> None:
+        """_upload_image with idx=2 must produce x_center within frame width."""
+        import re
+
+        from glucotrack.services.miro_service import _FRAME_WIDTH
+
+        service = MiroService(
+            access_token="t",
+            board_id="b",
+            _retry_delays=(),
+        )
+        captured_x: list[float] = []
+
+        def capture(request: httpx.Request) -> httpx.Response:
+            # Extract "x" value from the JSON data field embedded in the multipart body
+            match = re.search(rb'"x"\s*:\s*(\d+(?:\.\d+)?)', request.content)
+            if match:
+                captured_x.append(float(match.group(1)))
+            return httpx.Response(201, json={"id": "img-id"})
+
+        respx.post("https://api.miro.com/v2/boards/b/images").mock(side_effect=capture)
+
+        await service._upload_image(
+            frame_id="frame-1",
+            image={"type": "food", "file_bytes": b"fake", "telegram_file_id": "f"},
+            idx=2,
+        )
+
+        assert captured_x, "No x value captured from multipart request"
+        assert all(x <= _FRAME_WIDTH for x in captured_x), (
+            f"_upload_image idx=2: x={captured_x[0]} exceeds frame width {_FRAME_WIDTH}"
+        )
+
+    @pytest.mark.asyncio
     async def test_card_not_blocked_by_single_image_failure(self) -> None:
         """Card creation continues when one image upload fails (FR-011)."""
         service = _make_service()
@@ -686,3 +763,41 @@ class TestMiroBuildSectionText:
         analysis = self._make_analysis_with(nutrition_json="not-valid-json")
         text = service._build_section_text(analysis, "food")
         assert "unavailable" in text.lower() or "Analysis" in text
+
+    # ── Bullet point format tests ─────────────────────────────────────────────
+
+    def test_food_section_uses_bullet_points(self) -> None:
+        """Food section data lines must use • bullet prefix."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "food")
+        assert "•" in text, f"Expected bullet points in food section, got:\n{text}"
+
+    def test_activity_section_uses_bullet_points(self) -> None:
+        """Activity section lines must use • bullet prefix when activity is present."""
+        service = _make_service()
+        analysis = self._make_analysis_with(
+            activity_json=json.dumps(
+                {
+                    "description": "30-min walk",
+                    "glucose_modulation": "Moderate reduction",
+                    "effect_summary": "Levels stabilised",
+                }
+            )
+        )
+        text = service._build_section_text(analysis, "activity")
+        assert "•" in text, f"Expected bullet points in activity section, got:\n{text}"
+
+    def test_glucose_section_uses_bullet_points(self) -> None:
+        """Each glucose curve point must use • bullet prefix."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "glucose")
+        assert "•" in text, f"Expected bullet points in glucose section, got:\n{text}"
+
+    def test_recommendations_section_uses_bullet_points(self) -> None:
+        """Recommendations must use • bullet prefix instead of numbered list."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "recommendations")
+        assert "•" in text, f"Expected bullet points in recommendations section, got:\n{text}"

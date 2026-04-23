@@ -236,9 +236,11 @@ class MiroService:
 
         Returns image item ID on success, None on failure (FR-011).
         """
-        # Miro uses origin:center — convert left-edge start to center coordinate
-        x_center = _IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2
-        y_center = _IMAGE_Y_START + _IMAGE_HEIGHT // 2
+        # Miro uses origin:center — compute row/col to support multiple rows of images
+        col = idx % _IMAGES_PER_ROW
+        row = idx // _IMAGES_PER_ROW
+        x_center = _IMAGE_X_STEP * col + 20 + _IMAGE_WIDTH // 2
+        y_center = _IMAGE_Y_START + row * _IMAGE_ROW_HEIGHT + _IMAGE_HEIGHT // 2
         data_field = json.dumps(
             {
                 "title": f"{image['type']}_{idx + 1}",
@@ -373,15 +375,14 @@ class MiroService:
                 gi_cat = nutrition.get("gi_category") or "?"
                 gi_est = nutrition.get("gi_estimate", "?")
                 narrative = nutrition.get("glucose_impact_narrative", "")
-                text = (
-                    f"**Food**\n\n"
-                    f"Items: {items_str}\n"
-                    f"Carbs: {carbs}g | Protein: {proteins}g | Fat: {fats}g | "
-                    f"GI: {gi_cat} (~{gi_est})"
-                )
+                lines = [
+                    "**Food**\n",
+                    f"• Items: {items_str}",
+                    f"• Carbs: {carbs}g | Protein: {proteins}g | Fat: {fats}g | GI: {gi_cat} (~{gi_est})",
+                ]
                 if narrative:
-                    text += f"\n\n{narrative}"
-                return text
+                    lines.append(f"\n{narrative}")
+                return "\n".join(lines)
             except (json.JSONDecodeError, TypeError, AttributeError):
                 return fallback
 
@@ -395,12 +396,12 @@ class MiroService:
                 effect = activity.get("effect_summary", "")
                 if not description:
                     return "**Activity**\n\nNo activity logged"
-                text = f"**Activity**\n\n{description}"
+                lines = ["**Activity**\n", f"• {description}"]
                 if modulation:
-                    text += f"\n{modulation}"
+                    lines.append(f"• {modulation}")
                 if effect:
-                    text += f"\n{effect}"
-                return text
+                    lines.append(f"• {effect}")
+                return "\n".join(lines)
             except (json.JSONDecodeError, TypeError, AttributeError):
                 return fallback
 
@@ -419,7 +420,7 @@ class MiroService:
                         indicator = "⚠️ out of range"
                     else:
                         indicator = ""
-                    line = f"{label}: {value} mg/dL — {indicator}"
+                    line = f"• {label}: {value} mg/dL — {indicator}"
                     if shape:
                         line += f" | Shape: {shape}"
                     lines.append(line)
@@ -447,15 +448,12 @@ class MiroService:
                 dips = correlation.get("dips") or []
                 stable = correlation.get("stable_zones") or []
                 summary = correlation.get("summary", "")
-                if spikes:
-                    lines.append("Spikes:")
-                    lines.extend(f"  • {s}" for s in spikes)
-                if dips:
-                    lines.append("Dips:")
-                    lines.extend(f"  • {d}" for d in dips)
-                if stable:
-                    lines.append("Stable zones:")
-                    lines.extend(f"  • {z}" for z in stable)
+                for s in spikes:
+                    lines.append(f"• {s}")
+                for d in dips:
+                    lines.append(f"• {d}")
+                for z in stable:
+                    lines.append(f"• {z}")
                 if summary:
                     lines.append(f"\n{summary}")
                 return "\n".join(lines)
@@ -472,8 +470,8 @@ class MiroService:
                     )
                 sorted_recs = sorted(recommendations, key=lambda r: r.get("priority", 99))
                 lines = ["**Recommendations**\n"]
-                for i, rec in enumerate(sorted_recs, 1):
-                    lines.append(f"{i}. {rec.get('text', '')}")
+                for rec in sorted_recs:
+                    lines.append(f"• {rec.get('text', '')}")
                 return "\n".join(lines)
             except (json.JSONDecodeError, TypeError, AttributeError):
                 return fallback
@@ -526,8 +524,10 @@ class MiroService:
             img_id = await self._upload_image(frame_id=frame_id, image=image, idx=idx)
             if img_id is None:
                 # FR-011: placeholder sticky note at the image's frame-relative position
-                x_center = _IMAGE_X_STEP * idx + 20 + _IMAGE_WIDTH // 2
-                y_center = _IMAGE_Y_START + _IMAGE_HEIGHT // 2
+                col = idx % _IMAGES_PER_ROW
+                row = idx // _IMAGES_PER_ROW
+                x_center = _IMAGE_X_STEP * col + 20 + _IMAGE_WIDTH // 2
+                y_center = _IMAGE_Y_START + row * _IMAGE_ROW_HEIGHT + _IMAGE_HEIGHT // 2
                 try:
                     await self._add_sticky_note(
                         frame_id=frame_id,
