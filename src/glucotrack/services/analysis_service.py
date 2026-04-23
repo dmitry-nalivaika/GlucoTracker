@@ -239,7 +239,11 @@ class AnalysisService:
             logger.info("Miro card created: %s (record=%s)", card_id, miro_card_id)
             # Best-effort status update — non-fatal if session is closing
             try:
-                result = await self._db.execute(select(MiroCard).where(MiroCard.id == miro_card_id))
+                result = await self._db.execute(
+                    select(MiroCard).where(
+                        and_(MiroCard.id == miro_card_id, MiroCard.user_id == analysis.user_id)
+                    )
+                )
                 miro_card = result.scalar_one_or_none()
                 if miro_card is not None:
                     miro_card.status = MiroCardStatus.CREATED

@@ -391,7 +391,8 @@ class MiroService:
                 lines = [
                     "**Food**\n",
                     f"• Items: {items_str}",
-                    f"• Carbs: {carbs}g | Protein: {proteins}g | Fat: {fats}g | GI: {gi_cat} (~{gi_est})",
+                    f"• Carbs: {carbs}g | Protein: {proteins}g | Fat: {fats}g",
+                    f"• GI: {gi_cat} (~{gi_est})",
                 ]
                 if narrative:
                     lines.append(f"\n{narrative}")
