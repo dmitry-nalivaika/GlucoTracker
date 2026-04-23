@@ -229,8 +229,21 @@ class TestMiroEnhancedAPISchemaContract:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_sticky_note_style_has_no_textcolor(self) -> None:
-        """Sticky note style must NOT include textColor — invalid Miro field → 400."""
+    async def test_sticky_note_style_uses_valid_fill_color(self) -> None:
+        """Sticky note style must use a valid fillColor enum value, never a hex code.
+
+        StickyNoteStyle.fillColor is a STRICT ENUM — only named values are accepted.
+        Hex codes like '#e6e6e6' cause 400 Bad Request. textColor is also an
+        invalid field for sticky notes and must not be present.
+        Valid values: gray, light_yellow, yellow, orange, light_green, green,
+        dark_green, cyan, light_pink, pink, violet, red, light_blue, blue,
+        dark_blue, black.
+        """
+        _VALID_FILL_COLORS = {
+            "gray", "light_yellow", "yellow", "orange", "light_green", "green",
+            "dark_green", "cyan", "light_pink", "pink", "violet", "red",
+            "light_blue", "blue", "dark_blue", "black",
+        }
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
         analysis = _make_analysis()
         captured_styles: list[dict] = []
@@ -265,6 +278,11 @@ class TestMiroEnhancedAPISchemaContract:
         for style in captured_styles:
             assert "textColor" not in style, (
                 f"'textColor' is not a valid Miro sticky note style field — got: {style}"
+            )
+            fill = style.get("fillColor")
+            assert fill in _VALID_FILL_COLORS, (
+                f"fillColor must be a named enum value, not a hex code — got: {fill!r}. "
+                f"Valid values: {sorted(_VALID_FILL_COLORS)}"
             )
 
     @pytest.mark.asyncio

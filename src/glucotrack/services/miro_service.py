@@ -37,10 +37,13 @@ _IMAGE_X_STEP = 300
 _IMAGE_Y_START = 100
 
 # Section colour palette (feature 002)
-# Miro sticky notes only accept fillColor, textAlign, textAlignVertical — no textColor
-_STYLE_SEPARATOR = {"fillColor": "#e6e6e6"}
-_STYLE_SECTION = {"fillColor": "#f7f7f7"}
-_STYLE_PLACEHOLDER = {"fillColor": "#fff3cd"}
+# Miro StickyNoteStyle.fillColor is a STRICT ENUM — only named values accepted.
+# Hex codes like "#e6e6e6" cause 400 Bad Request.
+# Valid values: gray, light_yellow, yellow, orange, light_green, green, dark_green,
+#               cyan, light_pink, pink, violet, red, light_blue, blue, dark_blue, black
+_STYLE_SEPARATOR = {"fillColor": "gray"}
+_STYLE_SECTION = {"fillColor": "light_yellow"}
+_STYLE_PLACEHOLDER = {"fillColor": "yellow"}
 
 
 class MiroError(Exception):
