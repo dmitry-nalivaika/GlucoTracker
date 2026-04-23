@@ -30,8 +30,9 @@ _IMAGE_WIDTH = 280
 _IMAGE_HEIGHT = 280
 _IMAGES_PER_ROW = 4
 _IMAGE_ROW_HEIGHT = 320
-_SECTION_HEIGHT = 150
+_SECTION_HEIGHT = 250  # minimum spacing between section centres (auto-height may be larger)
 _SECTION_GAP = 20
+_SECTION_INITIAL_GAP = 180  # extra y-offset: separator → first section, clears image area
 _SECTION_WIDTH = 1160
 _IMAGE_X_STEP = 300
 _IMAGE_Y_START = 100
@@ -192,7 +193,7 @@ class MiroService:
         Raises MiroError on unrecoverable failure.
         """
         n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
-        section_block = 6 * (_SECTION_HEIGHT + _SECTION_GAP)
+        section_block = _SECTION_INITIAL_GAP + 6 * (_SECTION_HEIGHT + _SECTION_GAP)
         frame_height = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + section_block + 60
 
         url = f"{_MIRO_API_BASE}/boards/{self._board_id}/frames"
@@ -552,9 +553,10 @@ class MiroService:
         except MiroError as exc:
             logger.warning("Failed to add separator: %s", exc)
 
-        # 5 analysis sections
+        # 5 analysis sections — start _SECTION_INITIAL_GAP below separator so sections
+        # don't expand upward into the image area (images end at ~y=380, separator at ~y=440)
         section_names = ["food", "activity", "glucose", "correlation", "recommendations"]
-        y_offset = section_y_start + 60  # below separator
+        y_offset = section_y_start + _SECTION_INITIAL_GAP
 
         for section_name in section_names:
             try:
