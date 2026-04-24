@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 
 # Inline keyboard data
 _FOOD = "type:food"
-_CGM = "type:cgm"
 _NOT_SURE = "type:unsure"
 _CGM_BEFORE = "timing:before eating"
 _CGM_AFTER_IMMEDIATE = "timing:right after eating"
@@ -61,14 +60,32 @@ _CGM_2H = "timing:2 hours after"
 _CGM_OTHER = "timing:other"
 _CONTINUE_SESSION = "session:continue"
 _NEW_SESSION = "session:new"
+# Flat CGM timing buttons — shown directly in the photo classification keyboard
+_FLAT_CGM_BEFORE = "flat:before eating"
+_FLAT_CGM_AFTER_IMMEDIATE = "flat:right after eating"
+_FLAT_CGM_1H = "flat:1 hour after"
+_FLAT_CGM_2H = "flat:2 hours after"
 
 
 def _photo_type_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
+    """Single-step photo classification keyboard.
+
+    Shows all options at once: Food + 4 CGM timing variants (no nesting).
+    """
     return InlineKeyboardMarkup(
         [
+            [InlineKeyboardButton(_t("kb_food_photo", lang), callback_data=_FOOD)],
             [
-                InlineKeyboardButton(_t("kb_food_photo", lang), callback_data=_FOOD),
-                InlineKeyboardButton(_t("kb_cgm_screenshot", lang), callback_data=_CGM),
+                InlineKeyboardButton(
+                    _t("kb_cgm_flat_before", lang), callback_data=_FLAT_CGM_BEFORE
+                ),
+                InlineKeyboardButton(
+                    _t("kb_cgm_flat_after", lang), callback_data=_FLAT_CGM_AFTER_IMMEDIATE
+                ),
+            ],
+            [
+                InlineKeyboardButton(_t("kb_cgm_flat_1h", lang), callback_data=_FLAT_CGM_1H),
+                InlineKeyboardButton(_t("kb_cgm_flat_2h", lang), callback_data=_FLAT_CGM_2H),
             ],
             [InlineKeyboardButton(_t("kb_not_sure", lang), callback_data=_NOT_SURE)],
         ]
@@ -282,14 +299,11 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
         file = await context.bot.get_file(file_id)
         file_bytes = await file.download_as_bytearray()
 
-        if query.data == _CGM:
+        if query.data.startswith("flat:"):
+            # Flat CGM timing button — save directly without a second keyboard step
+            timing_label = query.data[len("flat:") :]
             context.user_data["pending_file_bytes"] = bytes(file_bytes)
-            await query.edit_message_text(
-                formatters.fmt_cgm_timing_prompt(lang=lang),
-                parse_mode=ParseMode.MARKDOWN_V2,
-                reply_markup=_cgm_timing_keyboard(lang),
-            )
-            return CGM_TIMING_PROMPT
+            return await _save_cgm(update, context, timing_label, lang=lang)
 
         async with _session_service(context) as service:
             if query.data == _FOOD:
@@ -634,7 +648,7 @@ def build_conversation_handler() -> ConversationHandler:
                 CommandHandler("language", handle_language_command),
             ],
             PHOTO_TYPE_PROMPT: [
-                CallbackQueryHandler(handle_photo_type_callback, pattern=r"^type:"),
+                CallbackQueryHandler(handle_photo_type_callback, pattern=r"^(type:|flat:)"),
             ],
             CGM_TIMING_PROMPT: [
                 CallbackQueryHandler(handle_cgm_timing_callback, pattern=r"^timing:"),
