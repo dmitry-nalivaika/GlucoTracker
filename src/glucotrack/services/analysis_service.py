@@ -54,11 +54,15 @@ class AnalysisService:
         session_id: str,
         chat_id: int,
         bot: Any,
+        reply_markup: Any = None,
     ) -> None:
         """Run full analysis pipeline for a completed session.
 
         Sends "Analysis in progress" ack is sent by handle_done before calling this.
         This method delivers the final result.
+
+        reply_markup: optional ReplyKeyboardMarkup to attach to every message sent
+        here so the user always has buttons after seeing the result or an error.
         """
         try:
             # Resolve user language preference early (FR-003, FR-004)
@@ -152,6 +156,7 @@ class AnalysisService:
                     chat_id=chat_id,
                     text=formatters.fmt_analysis_error(lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=reply_markup,
                 )
                 return
 
@@ -161,6 +166,7 @@ class AnalysisService:
                     chat_id=chat_id,
                     text=formatters.fmt_cgm_unparseable(lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=reply_markup,
                 )
                 return
 
@@ -188,6 +194,7 @@ class AnalysisService:
                 chat_id=chat_id,
                 text=formatters.fmt_analysis_result(analysis, lang=lang),
                 parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup,
             )
 
             # Persist MiroCard record synchronously before firing task (T046)
@@ -218,6 +225,7 @@ class AnalysisService:
                     chat_id=chat_id,
                     text=formatters.fmt_generic_error(),
                     parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=reply_markup,
                 )
             except Exception:
                 pass

@@ -133,6 +133,14 @@ def _settings_language_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     )
 
 
+def _post_session_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
+    """Reply keyboard sent with the final analysis result — lets the user start over."""
+    return ReplyKeyboardMarkup(
+        [["/new", "/trend"], ["/settings"]],
+        resize_keyboard=True,
+    )
+
+
 def _disambiguate_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[_t("kb_continue_session", lang), _t("kb_new_session", lang)]],
@@ -501,6 +509,7 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
                 session_id=session.id,
                 chat_id=update.effective_chat.id if update.effective_chat else user_id,
                 bot=context.bot,
+                reply_markup=_post_session_keyboard(lang),
             )
         )
 
