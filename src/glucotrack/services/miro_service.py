@@ -50,6 +50,7 @@ _SECTION_TOP_MARGIN = 180
 _STYLE_SEPARATOR = {"fillColor": "gray"}
 _STYLE_SECTION = {"fillColor": "light_yellow"}
 _STYLE_PLACEHOLDER = {"fillColor": "yellow"}
+_COL_FULL = -1  # sentinel: section grid entry spans full frame width
 
 
 class MiroError(Exception):
@@ -624,7 +625,6 @@ class MiroService:
             frame_width * (2 * c + 1) // (2 * _SECTION_COLS) for c in range(_SECTION_COLS)
         ]  # e.g. [300, 900] for a 1200px frame split into 2 columns
 
-        _COL_FULL = -1  # sentinel: section spans full frame width
         section_grid: list[tuple[str, int, int]] = [
             # (section_name_or_sentinel, row, col)
             ("food", 0, 0),
