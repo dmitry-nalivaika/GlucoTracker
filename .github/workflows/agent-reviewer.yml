@@ -45,5 +45,4 @@ jobs:
             End your review with either APPROVED or CHANGES REQUESTED.
 
             You MUST NOT fix code. You MUST NOT approve if any BLOCKER items remain.
-          allowed_tools: "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*),Bash(cat:*),Bash(ls:*),Read,Glob,Grep"
           claude_args: "--max-turns 40"

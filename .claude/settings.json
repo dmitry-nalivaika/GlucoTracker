@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr review:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Read",
+      "Glob",
+      "Grep"
+    ]
+  }
+}
