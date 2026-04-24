@@ -93,6 +93,14 @@ def _cgm_timing_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     )
 
 
+def _session_action_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
+    """Persistent reply keyboard shown when a session is open (feature 004)."""
+    return ReplyKeyboardMarkup(
+        [["/done", "/cancel", "/status"]],
+        resize_keyboard=True,
+    )
+
+
 def _disambiguate_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[_t("kb_continue_session", lang), _t("kb_new_session", lang)]],
@@ -186,6 +194,11 @@ async def handle_new_session(update: Update, context: ContextTypes.DEFAULT_TYPE)
             _t("new_session_started", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
+        await update.message.reply_text(
+            formatters.fmt_session_start_prompt(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
+        )
     except Exception as exc:
         logger.exception("handle_new_session error: %s", exc)
         await update.message.reply_text(
@@ -267,7 +280,8 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
             if query.data == _FOOD:
                 await service.handle_photo(user_id, bytes(file_bytes), file_id, entry_type="food")
                 await query.edit_message_text(
-                    formatters.fmt_food_ack(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+                    formatters.fmt_food_ack(lang=lang, guided=True),
+                    parse_mode=ParseMode.MARKDOWN_V2,
                 )
             else:  # _NOT_SURE
                 await service.handle_photo(
@@ -340,12 +354,14 @@ async def _save_cgm(
             await service.handle_photo(
                 user_id, file_bytes, file_id, entry_type="cgm", timing_label=timing_label
             )
-        msg = formatters.fmt_cgm_ack(timing_label, lang=lang)
+        msg = formatters.fmt_cgm_ack(timing_label, lang=lang, guided=True)
         if update.callback_query:
             await update.callback_query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
         elif update.message:
             await update.message.reply_text(
-                msg, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=ReplyKeyboardRemove()
+                msg,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=_session_action_keyboard(lang),
             )
     except Exception as exc:
         logger.exception("_save_cgm error: %s", exc)
@@ -372,7 +388,9 @@ async def handle_activity_text(update: Update, context: ContextTypes.DEFAULT_TYP
         async with _session_service(context) as service:
             await service.handle_activity(update.effective_user.id, text)
         await update.message.reply_text(
-            formatters.fmt_activity_ack(text, lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_activity_ack(text, lang=lang, guided=True),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
         )
     except Exception as exc:
         logger.exception("handle_activity_text error: %s", exc)
@@ -412,9 +430,11 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return SESSION_OPEN
 
-    # Immediate acknowledgement < 2s (SC-002)
+    # Immediate acknowledgement < 2s (SC-002); dismiss action keyboard
     await update.message.reply_text(
-        formatters.fmt_analysis_queued(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+        formatters.fmt_analysis_queued(lang=lang),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=ReplyKeyboardRemove(),
     )
 
     # Fire background analysis task

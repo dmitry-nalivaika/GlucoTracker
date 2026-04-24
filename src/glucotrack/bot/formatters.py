@@ -35,17 +35,41 @@ def fmt_cgm_timing_prompt(*, lang: str = "en") -> str:
     return i18n.t("cgm_timing_prompt", lang)
 
 
-def fmt_food_ack(description: str | None = None, *, lang: str = "en") -> str:
+def fmt_food_ack(description: str | None = None, *, lang: str = "en", guided: bool = False) -> str:
     note = f" \\({_escape(description)}\\)" if description else ""
-    return i18n.t("food_ack", lang, note=note)
+    msg = i18n.t("food_ack", lang, note=note)
+    if guided:
+        msg += i18n.t("food_ack_next_step", lang)
+    return msg
 
 
-def fmt_cgm_ack(timing_label: str, *, lang: str = "en") -> str:
-    return i18n.t("cgm_ack", lang, timing=_escape(timing_label))
+def fmt_cgm_ack(timing_label: str, *, lang: str = "en", guided: bool = False) -> str:
+    msg = i18n.t("cgm_ack", lang, timing=_escape(timing_label))
+    if guided:
+        msg += i18n.t("cgm_ack_next_step", lang)
+    return msg
 
 
-def fmt_activity_ack(text: str, *, lang: str = "en") -> str:
-    return i18n.t("activity_ack", lang, text=_escape(text))
+def fmt_activity_ack(text: str, *, lang: str = "en", guided: bool = False) -> str:
+    msg = i18n.t("activity_ack", lang, text=_escape(text))
+    if guided:
+        msg += i18n.t("activity_ack_next_step", lang)
+    return msg
+
+
+def fmt_session_start_prompt(*, lang: str = "en") -> str:
+    """Guided prompt telling user to send a food photo after session starts."""
+    return i18n.t("session_start_prompt", lang)
+
+
+def fmt_bot_online(*, lang: str = "en") -> str:
+    """Broadcast message when bot comes online."""
+    return i18n.t("bot_online", lang)
+
+
+def fmt_bot_offline(*, lang: str = "en") -> str:
+    """Broadcast message when bot goes offline."""
+    return i18n.t("bot_offline", lang)
 
 
 def fmt_session_status(food: int, cgm: int, activity: int, *, lang: str = "en") -> str:

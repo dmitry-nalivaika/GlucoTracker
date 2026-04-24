@@ -160,6 +160,44 @@ class TestFormatters:
         assert "Correlation" in text
         assert "Recommendations" in text
 
+    # ── Guided flow formatters (feature 004, T006) ───────────────────────────
+
+    def test_fmt_food_ack_guided_en(self) -> None:
+        """Food ack with guided=True includes a next-step hint in English."""
+        text = formatters.fmt_food_ack(guided=True)
+        assert "CGM" in text or "cgm" in text.lower() or "/done" in text
+
+    def test_fmt_food_ack_guided_ru(self) -> None:
+        """Food ack with guided=True includes a next-step hint in Russian."""
+        text = formatters.fmt_food_ack(lang="ru", guided=True)
+        assert "CGM" in text or "/done" in text
+
+    def test_fmt_cgm_ack_guided_en(self) -> None:
+        """CGM ack with guided=True includes a next-step hint in English."""
+        text = formatters.fmt_cgm_ack("1 hour after", guided=True)
+        assert "/done" in text or "activity" in text.lower()
+
+    def test_fmt_activity_ack_guided_en(self) -> None:
+        """Activity ack with guided=True includes a next-step hint in English."""
+        text = formatters.fmt_activity_ack("walked 20 min", guided=True)
+        assert "/done" in text
+
+    def test_fmt_session_start_prompt_en(self) -> None:
+        """Session start prompt tells user to send a food photo."""
+        text = formatters.fmt_session_start_prompt()
+        assert "photo" in text.lower() or "food" in text.lower()
+
+    def test_fmt_session_start_prompt_ru(self) -> None:
+        """Session start prompt is in Russian when lang=ru."""
+        text = formatters.fmt_session_start_prompt(lang="ru")
+        # Should contain at least one Cyrillic character
+        assert any("\u0400" <= c <= "\u04ff" for c in text)
+
+    def test_fmt_food_ack_without_guided_unchanged(self) -> None:
+        """fmt_food_ack without guided= flag behaves as before (backward compat)."""
+        text = formatters.fmt_food_ack()
+        assert "saved" in text.lower() or "сохранено" in text.lower() or "✅" in text
+
     def test_fmt_analysis_result_no_activity_logged_message(self) -> None:
         """When activity has null description, show 'No activity' message."""
         activity = json.dumps(

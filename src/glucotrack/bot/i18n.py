@@ -308,6 +308,45 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "⚠️ CGM unreadable: {err}. Please re-submit a clearer screenshot.",
         "ru": "⚠️ CGM нечитаем: {err}. Отправьте более чёткий скриншот.",
     },
+    # Guided conversational flow next-step hints (feature 004)
+    "food_ack_next_step": {
+        "en": " Send another food photo, a CGM screenshot, or tap /done when ready\\.",
+        "ru": " Отправьте ещё фото еды, скриншот CGM или нажмите /done\\.",
+    },
+    "cgm_ack_next_step": {
+        "en": " Add another CGM screenshot, describe your activity, or tap /done\\.",
+        "ru": " Добавьте ещё скриншот CGM, опишите активность или нажмите /done\\.",
+    },
+    "activity_ack_next_step": {
+        "en": " Add more photos if needed, or tap /done for your analysis\\.",
+        "ru": " При необходимости добавьте фото, или нажмите /done для анализа\\.",
+    },
+    "session_start_prompt": {
+        "en": "📷 Send me a *food photo* to start logging your meal\\.",
+        "ru": "📷 Отправьте *фото еды*, чтобы начать запись приёма пищи\\.",
+    },
+    # Bot online / offline broadcast messages (feature 004)
+    "bot_online": {
+        "en": "🟢 *GlucoTrack* is online and ready\\! Send /new to start a session\\.",
+        "ru": "🟢 *GlucoTrack* онлайн и готов к работе\\! Отправьте /new для новой сессии\\.",
+    },
+    "bot_offline": {
+        "en": "⏸️ *GlucoTrack* is going offline briefly\\. Sessions are preserved\\.",
+        "ru": "⏸️ *GlucoTrack* временно недоступен\\. Ваши данные сохранены\\.",
+    },
+    # Miro executive summary / encouragement section headers (feature 004)
+    "miro_summary_header": {
+        "en": "**Session Summary**",
+        "ru": "**Итоги сессии**",
+    },
+    "miro_summary_unavailable": {
+        "en": "Summary not available for this session.",
+        "ru": "Итог недоступен для этой сессии.",
+    },
+    "miro_encouragement_unavailable": {
+        "en": "Keep up the great work tracking your glucose!",
+        "ru": "Продолжайте вести мониторинг глюкозы — вы молодец!",
+    },
     # Inline keyboard button labels
     "kb_food_photo": {"en": "🍽️ Food photo", "ru": "🍽️ Фото еды"},
     "kb_cgm_screenshot": {"en": "📈 CGM screenshot", "ru": "📈 Скриншот CGM"},
