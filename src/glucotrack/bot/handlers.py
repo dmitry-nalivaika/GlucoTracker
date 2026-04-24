@@ -161,9 +161,12 @@ def _get_analysis_service(context: ContextTypes.DEFAULT_TYPE):  # type: ignore[r
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /start — welcome and ensure user is created."""
     assert update.effective_user and update.message
+    is_new_session = False
     async with _session_service(context) as service:
         try:
-            await service.get_or_open_session(update.effective_user.id, force_new=False)
+            _, is_new_session = await service.get_or_open_session(
+                update.effective_user.id, force_new=False
+            )
         except Exception:
             pass
     # Store chat_id for online/offline broadcast (feature 004, AC2.4)
@@ -176,6 +179,13 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         formatters.fmt_welcome(update.effective_user.first_name, lang=lang),
         parse_mode=ParseMode.MARKDOWN_V2,
     )
+    # AC1.1: send guided prompt + action keyboard when no pre-existing session (feature 004)
+    if is_new_session:
+        await update.message.reply_text(
+            formatters.fmt_session_start_prompt(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
+        )
     return SESSION_OPEN
 
 

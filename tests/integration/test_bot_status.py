@@ -1,8 +1,9 @@
-"""Integration tests for bot online/offline broadcast (feature 004, US2)."""
+"""Integration tests for bot online/offline broadcast and handle_start (feature 004)."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -86,3 +87,91 @@ class TestBotOnlineBroadcast:
         # Russian message contains Cyrillic
         text = call_kwargs["text"]
         assert any("\u0400" <= c <= "\u04ff" for c in text)
+
+
+class TestHandleStartGuidedPrompt:
+    """Tests for the guided prompt + keyboard sent from handle_start (BLOCKER AC1.1)."""
+
+    def _make_update_and_context(self, user_id: int, chat_id: int, storage: object) -> tuple:
+        """Build minimal PTB Update and context mocks."""
+        mock_message = MagicMock()
+        mock_message.reply_text = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = user_id
+        mock_user.first_name = "Tester"
+        mock_chat = MagicMock()
+        mock_chat.id = chat_id
+        mock_update = MagicMock()
+        mock_update.effective_user = mock_user
+        mock_update.message = mock_message
+        mock_update.effective_chat = mock_chat
+
+        settings = MagicMock()
+        settings.session_idle_threshold_minutes = 60
+        settings.session_idle_expiry_hours = 24
+        mock_context = MagicMock()
+        mock_context.user_data = {}
+        mock_context.application.bot_data = {
+            "settings": settings,
+            "storage": storage,
+        }
+        return mock_update, mock_context
+
+    @pytest.mark.asyncio
+    async def test_start_with_no_session_sends_guided_prompt_and_keyboard(self, test_db) -> None:
+        """AC1.1: /start with no open session sends guided prompt + ReplyKeyboardMarkup."""
+        from telegram import ReplyKeyboardMarkup
+
+        from glucotrack.bot.handlers import handle_start
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from glucotrack.storage.local_storage import StorageRepository
+
+            storage = StorageRepository(tmpdir)
+            mock_update, mock_context = self._make_update_and_context(7001, 77001, storage)
+
+            with patch("glucotrack.db.get_session") as mock_gs:
+                mock_gs.return_value.__aenter__ = AsyncMock(return_value=test_db)
+                mock_gs.return_value.__aexit__ = AsyncMock(return_value=False)
+                await handle_start(mock_update, mock_context)
+
+        reply_calls = mock_update.message.reply_text.call_args_list
+        assert (
+            len(reply_calls) == 2
+        ), f"Expected 2 reply_text calls (welcome + guided prompt), got {len(reply_calls)}"
+        second_kwargs = reply_calls[1].kwargs
+        reply_markup = second_kwargs.get("reply_markup")
+        assert reply_markup is not None, "Second message must include reply_markup"
+        assert isinstance(
+            reply_markup, ReplyKeyboardMarkup
+        ), f"Expected ReplyKeyboardMarkup, got {type(reply_markup)}"
+
+    @pytest.mark.asyncio
+    async def test_start_with_existing_session_does_not_send_guided_prompt(self, test_db) -> None:
+        """AC1.1: /start when user already has an open session sends only welcome (no keyboard)."""
+        from glucotrack.bot.handlers import handle_start
+        from glucotrack.domain.user import get_or_create_user
+        from glucotrack.repositories.session_repository import SessionRepository
+
+        # Pre-create an open session so handle_start finds an existing one
+        await get_or_create_user(test_db, telegram_user_id=7002)
+        await test_db.commit()
+        sess_repo = SessionRepository(test_db)
+        await sess_repo.create_session(user_id=7002)
+        await test_db.commit()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from glucotrack.storage.local_storage import StorageRepository
+
+            storage = StorageRepository(tmpdir)
+            mock_update, mock_context = self._make_update_and_context(7002, 77002, storage)
+
+            with patch("glucotrack.db.get_session") as mock_gs:
+                mock_gs.return_value.__aenter__ = AsyncMock(return_value=test_db)
+                mock_gs.return_value.__aexit__ = AsyncMock(return_value=False)
+                await handle_start(mock_update, mock_context)
+
+        reply_calls = mock_update.message.reply_text.call_args_list
+        assert (
+            len(reply_calls) == 1
+        ), f"Expected 1 reply_text call (welcome only), got {len(reply_calls)}"
