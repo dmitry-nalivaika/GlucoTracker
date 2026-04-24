@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
+from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler
 
+from glucotrack.bot import formatters
 from glucotrack.bot.handlers import (
     build_conversation_handler,
     handle_help,
@@ -14,6 +17,37 @@ from glucotrack.bot.handlers import (
 from glucotrack.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _broadcast_online(bot: Any) -> None:
+    """Send the online message to all users with a stored chat_id (feature 004, AC2.1).
+
+    Fire-and-forget: individual send errors are swallowed (AC2.2).
+    """
+    from glucotrack.db import get_session
+    from glucotrack.repositories.user_repository import UserRepository, effective_lang
+
+    try:
+        async with get_session() as db:
+            repo = UserRepository(db)
+            users = await repo.get_all_with_chat_id()
+    except Exception:
+        logger.exception("_broadcast_online: failed to load users")
+        return
+
+    async def _send_one(chat_id: int, lang: str) -> None:
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=formatters.fmt_bot_online(lang=lang),
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
+        except Exception:
+            logger.warning("_broadcast_online: failed to send to chat_id=%d", chat_id)
+
+    tasks = [_send_one(u.chat_id, effective_lang(u)) for u in users if u.chat_id is not None]
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 class _AnalysisServiceRunner:
@@ -83,7 +117,11 @@ def create_application(settings: Settings) -> Application:
     from glucotrack.services.miro_service import MiroService
     from glucotrack.storage.local_storage import StorageRepository
 
-    app = Application.builder().token(settings.telegram_bot_token).build()
+    async def _post_init(application: Application) -> None:  # type: ignore[type-arg]
+        """Broadcast online message after bot initialises (AC2.1)."""
+        asyncio.create_task(_broadcast_online(application.bot))
+
+    app = Application.builder().token(settings.telegram_bot_token).post_init(_post_init).build()
 
     # Singleton services
     storage = StorageRepository(settings.storage_root)

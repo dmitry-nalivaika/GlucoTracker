@@ -166,6 +166,11 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             await service.get_or_open_session(update.effective_user.id, force_new=False)
         except Exception:
             pass
+    # Store chat_id for online/offline broadcast (feature 004, AC2.4)
+    if update.effective_chat is not None:
+        async with _get_db_session() as db:
+            user_repo = UserRepository(db)  # type: ignore[arg-type]
+            await user_repo.update_chat_id(update.effective_user.id, update.effective_chat.id)
     lang = await _resolve_lang(update.effective_user.id, context)
     await update.message.reply_text(
         formatters.fmt_welcome(update.effective_user.first_name, lang=lang),
