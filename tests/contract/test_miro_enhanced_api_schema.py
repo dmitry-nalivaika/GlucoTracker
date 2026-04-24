@@ -54,9 +54,7 @@ def _make_analysis(user_id: int = 99) -> MagicMock:
             "summary": "The rice meal caused a moderate spike.",
         }
     )
-    analysis.recommendations_json = json.dumps(
-        [{"priority": 1, "text": "Reduce rice portion"}]
-    )
+    analysis.recommendations_json = json.dumps([{"priority": 1, "text": "Reduce rice portion"}])
     analysis.activity_json = json.dumps(
         {
             "description": "30-min walk",
@@ -201,7 +199,12 @@ class TestMiroEnhancedAPISchemaContract:
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-sticky-test"}},
+                json={
+                    "id": "img-001",
+                    "type": "image",
+                    "data": {},
+                    "parent": {"id": "frame-sticky-test"},
+                },
             )
         )
 
@@ -219,13 +222,13 @@ class TestMiroEnhancedAPISchemaContract:
         )
 
         # All sticky notes must have parent.id = frame ID
-        assert len(captured_sticky_bodies) >= 6, (
-            f"Expected ≥6 sticky notes (separator + 5 sections), got {len(captured_sticky_bodies)}"
-        )
+        assert (
+            len(captured_sticky_bodies) >= 6
+        ), f"Expected ≥6 sticky notes (separator + 5 sections), got {len(captured_sticky_bodies)}"
         for body in captured_sticky_bodies:
-            assert body.get("parent", {}).get("id") == "frame-sticky-test", (
-                f"Sticky note missing parent.id: {body}"
-            )
+            assert (
+                body.get("parent", {}).get("id") == "frame-sticky-test"
+            ), f"Sticky note missing parent.id: {body}"
 
     @pytest.mark.asyncio
     @respx.mock
@@ -239,10 +242,23 @@ class TestMiroEnhancedAPISchemaContract:
         dark_green, cyan, light_pink, pink, violet, red, light_blue, blue,
         dark_blue, black.
         """
-        _VALID_FILL_COLORS = {
-            "gray", "light_yellow", "yellow", "orange", "light_green", "green",
-            "dark_green", "cyan", "light_pink", "pink", "violet", "red",
-            "light_blue", "blue", "dark_blue", "black",
+        valid_fill_colors = {
+            "gray",
+            "light_yellow",
+            "yellow",
+            "orange",
+            "light_green",
+            "green",
+            "dark_green",
+            "cyan",
+            "light_pink",
+            "pink",
+            "violet",
+            "red",
+            "light_blue",
+            "blue",
+            "dark_blue",
+            "black",
         }
         service = MiroService(access_token="tok", board_id=BOARD_ID, _retry_delays=())
         analysis = _make_analysis()
@@ -256,7 +272,12 @@ class TestMiroEnhancedAPISchemaContract:
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-style-test"}},
+                json={
+                    "id": "img-001",
+                    "type": "image",
+                    "data": {},
+                    "parent": {"id": "frame-style-test"},
+                },
             )
         )
 
@@ -276,13 +297,13 @@ class TestMiroEnhancedAPISchemaContract:
 
         assert len(captured_styles) >= 1, "No sticky notes captured"
         for style in captured_styles:
-            assert "textColor" not in style, (
-                f"'textColor' is not a valid Miro sticky note style field — got: {style}"
-            )
+            assert (
+                "textColor" not in style
+            ), f"'textColor' is not a valid Miro sticky note style field — got: {style}"
             fill = style.get("fillColor")
-            assert fill in _VALID_FILL_COLORS, (
+            assert fill in valid_fill_colors, (
                 f"fillColor must be a named enum value, not a hex code — got: {fill!r}. "
-                f"Valid values: {sorted(_VALID_FILL_COLORS)}"
+                f"Valid values: {sorted(valid_fill_colors)}"
             )
 
     @pytest.mark.asyncio
@@ -307,7 +328,12 @@ class TestMiroEnhancedAPISchemaContract:
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-pos-test"}},
+                json={
+                    "id": "img-001",
+                    "type": "image",
+                    "data": {},
+                    "parent": {"id": "frame-pos-test"},
+                },
             )
         )
 
@@ -327,9 +353,9 @@ class TestMiroEnhancedAPISchemaContract:
 
         assert len(captured_positions) >= 1, "No sticky notes captured"
         for pos in captured_positions:
-            assert "relativeTo" not in pos, (
-                f"Sticky notes must not include relativeTo (unsupported field) — got: {pos}"
-            )
+            assert (
+                "relativeTo" not in pos
+            ), f"Sticky notes must not include relativeTo (unsupported field) — got: {pos}"
             # Frame-relative coords: x=600 centres horizontally in 1200px frame, y > 0
             assert pos.get("x", 0) > 0, f"Expected positive frame-relative x — got: {pos}"
             assert pos.get("y", 0) > 0, f"Expected positive frame-relative y — got: {pos}"
@@ -355,7 +381,12 @@ class TestMiroEnhancedAPISchemaContract:
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-geom-test"}},
+                json={
+                    "id": "img-001",
+                    "type": "image",
+                    "data": {},
+                    "parent": {"id": "frame-geom-test"},
+                },
             )
         )
 
@@ -396,11 +427,18 @@ class TestMiroEnhancedAPISchemaContract:
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/images").mock(
             return_value=httpx.Response(
                 201,
-                json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "the-frame-id"}},
+                json={
+                    "id": "img-001",
+                    "type": "image",
+                    "data": {},
+                    "parent": {"id": "the-frame-id"},
+                },
             )
         )
         respx.post(f"https://api.miro.com/v2/boards/{BOARD_ID}/sticky_notes").mock(
-            return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+            return_value=httpx.Response(
+                201, json={"id": "sn-001", "type": "sticky_note", "data": {}}
+            )
         )
 
         result = await service.create_enhanced_session_card(

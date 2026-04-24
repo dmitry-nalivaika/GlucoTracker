@@ -110,8 +110,6 @@ async def _get_user_lang(user_id: int, db: object) -> str:
 
     Reads from DB on first call; caches result. Always returns a valid lang code.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     user_repo = UserRepository(db)  # type: ignore[arg-type]
     user = await user_repo.get_by_telegram_id(user_id)
     return effective_lang(user)

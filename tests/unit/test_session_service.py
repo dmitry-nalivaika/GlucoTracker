@@ -144,9 +144,7 @@ class TestSessionServiceFilenames:
     """Filename uniqueness for uploaded photos."""
 
     @pytest.mark.asyncio
-    async def test_two_cgm_photos_with_shared_prefix_get_distinct_filenames(
-        self, test_db
-    ) -> None:
+    async def test_two_cgm_photos_with_shared_prefix_get_distinct_filenames(self, test_db) -> None:
         """Two CGM uploads with file IDs sharing the same 8-char prefix must produce
         distinct filenames — otherwise the second file silently overwrites the first,
         causing all CGM images on the Miro card to look identical.

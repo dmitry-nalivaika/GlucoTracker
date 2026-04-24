@@ -288,7 +288,9 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             await service.create_enhanced_session_card(
                 analysis=analysis, session_images=_make_session_images(1, 1)
@@ -320,7 +322,9 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             await service.create_enhanced_session_card(
                 analysis=analysis,
@@ -331,9 +335,9 @@ class TestMiroServiceEnhancedCard:
         if "cgm" in upload_types:
             first_cgm = upload_types.index("cgm")
             for i in range(first_cgm):
-                assert upload_types[i] == "food", (
-                    f"Expected food at position {i}, got {upload_types[i]}"
-                )
+                assert (
+                    upload_types[i] == "food"
+                ), f"Expected food at position {i}, got {upload_types[i]}"
 
     @pytest.mark.asyncio
     async def test_image_failure_adds_placeholder(self) -> None:
@@ -357,17 +361,21 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             await service.create_enhanced_session_card(
                 analysis=analysis, session_images=_make_session_images(1, 1)
             )
 
         # At least one placeholder sticky note for the failed uploads
-        placeholder_texts = [c for c in sticky_contents if "unavailable" in c.lower() or "failed" in c.lower()]
-        assert len(placeholder_texts) >= 1, (
-            f"Expected placeholder sticky notes for failed uploads, got: {sticky_contents}"
-        )
+        placeholder_texts = [
+            c for c in sticky_contents if "unavailable" in c.lower() or "failed" in c.lower()
+        ]
+        assert (
+            len(placeholder_texts) >= 1
+        ), f"Expected placeholder sticky notes for failed uploads, got: {sticky_contents}"
 
     @pytest.mark.asyncio
     async def test_all_five_sections_created(self) -> None:
@@ -392,16 +400,18 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             await service.create_enhanced_session_card(
                 analysis=analysis, session_images=_make_session_images(1, 1)
             )
 
         # 1 separator + 5 sections = 6 sticky notes (plus any image placeholders)
-        assert sticky_call_count >= 6, (
-            f"Expected ≥6 sticky note calls (separator + 5 sections), got {sticky_call_count}"
-        )
+        assert (
+            sticky_call_count >= 6
+        ), f"Expected ≥6 sticky note calls (separator + 5 sections), got {sticky_call_count}"
 
     @pytest.mark.asyncio
     async def test_returns_frame_id(self) -> None:
@@ -423,7 +433,9 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             result = await service.create_enhanced_session_card(
                 analysis=analysis, session_images=_make_session_images(1, 1)
@@ -465,13 +477,13 @@ class TestMiroServiceEnhancedCard:
                 session_images=_make_session_images(n_food=2, n_cgm=1),  # 3 images → idx 0,1,2
             )
 
-        assert len(placeholder_positions) == 3, (
-            f"Expected 3 placeholder sticky notes, got {len(placeholder_positions)}"
-        )
+        assert (
+            len(placeholder_positions) == 3
+        ), f"Expected 3 placeholder sticky notes, got {len(placeholder_positions)}"
         for i, pos in enumerate(placeholder_positions):
-            assert pos["x"] <= _FRAME_WIDTH, (
-                f"Placeholder {i} x={pos['x']} exceeds frame width {_FRAME_WIDTH}"
-            )
+            assert (
+                pos["x"] <= _FRAME_WIDTH
+            ), f"Placeholder {i} x={pos['x']} exceeds frame width {_FRAME_WIDTH}"
 
     @pytest.mark.asyncio
     @respx.mock
@@ -510,7 +522,6 @@ class TestMiroServiceEnhancedCard:
         import math
 
         from glucotrack.services.miro_service import (
-            _IMAGE_HEIGHT,
             _IMAGE_ROW_HEIGHT,
             _IMAGE_Y_START,
             _IMAGES_PER_ROW,
@@ -586,9 +597,9 @@ class TestMiroServiceEnhancedCard:
         )
 
         assert captured_x, "No x value captured from multipart request"
-        assert all(x <= _FRAME_WIDTH for x in captured_x), (
-            f"_upload_image idx=2: x={captured_x[0]} exceeds frame width {_FRAME_WIDTH}"
-        )
+        assert all(
+            x <= _FRAME_WIDTH for x in captured_x
+        ), f"_upload_image idx=2: x={captured_x[0]} exceeds frame width {_FRAME_WIDTH}"
 
     @pytest.mark.asyncio
     async def test_card_not_blocked_by_single_image_failure(self) -> None:
@@ -617,7 +628,9 @@ class TestMiroServiceEnhancedCard:
         with (
             patch.object(service, "_create_frame", new=AsyncMock(side_effect=mock_create_frame)),
             patch.object(service, "_upload_image", new=AsyncMock(side_effect=mock_upload_image)),
-            patch.object(service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)),
+            patch.object(
+                service, "_add_sticky_note", new=AsyncMock(side_effect=mock_add_sticky_note)
+            ),
         ):
             await service.create_enhanced_session_card(
                 analysis=analysis, session_images=_make_session_images(n_food=2, n_cgm=1)
@@ -626,9 +639,9 @@ class TestMiroServiceEnhancedCard:
         # Both images were attempted (not aborted after first failure)
         assert len(upload_calls) == 3, f"Expected 3 upload attempts, got {len(upload_calls)}"
         # All 5 sections + separator still created
-        assert sticky_call_count >= 6, (
-            f"Expected ≥6 sticky notes despite image failure, got {sticky_call_count}"
-        )
+        assert (
+            sticky_call_count >= 6
+        ), f"Expected ≥6 sticky notes despite image failure, got {sticky_call_count}"
 
 
 class TestMiroBuildSectionText:
@@ -749,7 +762,9 @@ class TestMiroBuildSectionText:
         assert "Rice caused spike at 1h" in text
         assert "Walk after meal lowered glucose" in text
         assert "Fasting was stable" in text
-        assert "rice meal" in text.lower() or "summary" in text.lower() or "attenuate" in text.lower()
+        assert (
+            "rice meal" in text.lower() or "summary" in text.lower() or "attenuate" in text.lower()
+        )
 
     def test_correlation_section_skips_empty_lists(self) -> None:
         """Correlation section does not show empty spike/dip headers."""
@@ -883,3 +898,51 @@ class TestMiroBuildSectionText:
         analysis = _make_analysis()
         text = service._build_section_text(analysis, "recommendations")
         assert "•" in text, f"Expected bullet points in recommendations section, got:\n{text}"
+
+
+class TestMiroSectionTextRussian:
+    """Russian section headers appear when lang='ru' — T018."""
+
+    def test_food_section_russian_header(self) -> None:
+        """_build_section_text('food', lang='ru') starts with Russian header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "food", lang="ru")
+        assert "Питание" in text, f"Expected Russian header 'Питание' in:\n{text}"
+
+    def test_activity_section_russian_header(self) -> None:
+        """_build_section_text('activity', lang='ru') starts with Russian header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "activity", lang="ru")
+        assert "Активность" in text, f"Expected Russian header 'Активность' in:\n{text}"
+
+    def test_glucose_section_russian_header(self) -> None:
+        """_build_section_text('glucose', lang='ru') starts with Russian header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "glucose", lang="ru")
+        assert (
+            "Кривая" in text or "глюкоза" in text.lower()
+        ), f"Expected Russian glucose header in:\n{text}"
+
+    def test_correlation_section_russian_header(self) -> None:
+        """_build_section_text('correlation', lang='ru') starts with Russian header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "correlation", lang="ru")
+        assert "Корреляция" in text, f"Expected Russian header 'Корреляция' in:\n{text}"
+
+    def test_recommendations_section_russian_header(self) -> None:
+        """_build_section_text('recommendations', lang='ru') starts with Russian header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "recommendations", lang="ru")
+        assert "Рекомендации" in text, f"Expected Russian header 'Рекомендации' in:\n{text}"
+
+    def test_english_header_by_default(self) -> None:
+        """_build_section_text without lang kwarg returns English header."""
+        service = _make_service()
+        analysis = _make_analysis()
+        text = service._build_section_text(analysis, "food")
+        assert "Food" in text

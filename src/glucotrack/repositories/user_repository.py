@@ -18,7 +18,9 @@ def effective_lang(user: User | None) -> str:
     """Return the user's language code, defaulting to 'en' if unset (FR-008)."""
     if user is None or user.language_code is None:
         return "en"
-    return user.language_code
+    lang: str = user.language_code
+    return lang
+
 
 logger = logging.getLogger(__name__)
 

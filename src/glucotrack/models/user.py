@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from glucotrack.models.base import Base, utcnow
 
 
-class SupportedLanguage(str, enum.Enum):
+class SupportedLanguage(enum.StrEnum):
     """Languages the bot can deliver output in (FR-009: extensible)."""
 
     EN = "en"

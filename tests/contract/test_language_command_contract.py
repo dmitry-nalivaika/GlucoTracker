@@ -23,7 +23,7 @@ class TestLanguageCommandContract:
         from glucotrack.domain.user import get_or_create_user
 
         # Ensure user exists
-        user = await get_or_create_user(test_db, 900)
+        await get_or_create_user(test_db, 900)
         await test_db.commit()
 
         update = MagicMock()

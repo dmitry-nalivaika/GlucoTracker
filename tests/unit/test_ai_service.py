@@ -369,3 +369,59 @@ class TestAIService:
                     activity_entries=[],
                     load_file_bytes=AsyncMock(return_value=b"img"),
                 )
+
+    @pytest.mark.asyncio
+    async def test_language_ru_appends_russian_instruction_to_system_prompt(self) -> None:
+        """analyse_session(language='ru') appends Russian instruction to system prompt."""
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture_create(**kwargs: object) -> object:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch.object(service._client.messages, "create", new=capture_create):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=b"img"),
+                language="ru",
+            )
+
+        system_prompt: str = captured_kwargs.get("system", "")
+        assert (
+            "Russian" in system_prompt or "russian" in system_prompt.lower()
+        ), "System prompt should contain language instruction for 'ru'"
+
+    @pytest.mark.asyncio
+    async def test_language_en_does_not_append_instruction(self) -> None:
+        """analyse_session(language='en') leaves the system prompt unchanged."""
+        from glucotrack.services.ai_service import SESSION_ANALYSIS_SYSTEM_PROMPT
+
+        service = _make_service()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=json.dumps(VALID_ANALYSIS))]
+        captured_kwargs: dict = {}
+
+        async def capture_create(**kwargs: object) -> object:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch.object(service._client.messages, "create", new=capture_create):
+            await service.analyse_session(
+                user_id=1,
+                food_entries=[{"telegram_file_id": "f1", "file_path": "p1"}],
+                cgm_entries=[{"telegram_file_id": "c1", "timing_label": "1h", "file_path": "p2"}],
+                activity_entries=[],
+                load_file_bytes=AsyncMock(return_value=b"img"),
+                language="en",
+            )
+
+        system_prompt: str = captured_kwargs.get("system", "")
+        assert (
+            system_prompt == SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "System prompt must be unchanged for language='en'"

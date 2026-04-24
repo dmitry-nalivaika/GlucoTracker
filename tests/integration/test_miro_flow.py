@@ -141,7 +141,9 @@ class TestMiroFlow:
             )
         )
         respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
-            return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+            return_value=httpx.Response(
+                201, json={"id": "sn-001", "type": "sticky_note", "data": {}}
+            )
         )
 
         mock_ai = AsyncMock()
@@ -173,9 +175,7 @@ class TestMiroFlow:
         assert mock_bot.send_message.called
 
     @pytest.mark.asyncio
-    async def test_miro_card_status_update_scoped_by_user_id(
-        self, test_db, sample_user
-    ) -> None:
+    async def test_miro_card_status_update_scoped_by_user_id(self, test_db, sample_user) -> None:
         """MiroCard status update must include user_id predicate — Constitution II IDOR guard.
 
         Scenario: user A's analysis triggers _create_miro_card_safe, but the

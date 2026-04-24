@@ -163,11 +163,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "cgm_unparseable": {
         "en": (
             "⚠️ I couldn't read your CGM screenshot clearly\\.\n\n"
-            "Your session data is saved\\. Please send a clearer screenshot and use /done to retry\\."
+            "Your session data is saved\\. Please send a clearer screenshot "
+            "and use /done to retry\\."
         ),
         "ru": (
             "⚠️ Не удалось чётко прочитать скриншот CGM\\.\n\n"
-            "Данные сессии сохранены\\. Пожалуйста, отправьте более чёткий скриншот и используйте /done\\."
+            "Данные сессии сохранены\\. Пожалуйста, отправьте более чёткий скриншот "
+            "и используйте /done\\."
         ),
     },
     # Analysis error
@@ -211,7 +213,10 @@ STRINGS: dict[str, dict[str, str]] = {
     # Generic error
     "generic_error": {
         "en": "Something went wrong\\. Please try again or use /cancel to reset your session\\.",
-        "ru": "Что\\-то пошло не так\\. Попробуйте ещё раз или используйте /cancel для сброса сессии\\.",
+        "ru": (
+            "Что\\-то пошло не так\\. Попробуйте ещё раз "
+            "или используйте /cancel для сброса сессии\\."
+        ),
     },
     # /help
     "help": {
