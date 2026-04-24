@@ -384,6 +384,17 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Please provide a timing label\\.",
         "ru": "Пожалуйста, укажите метку времени\\.",
     },
+    # Settings panel (feature 004)
+    "settings_prompt": {
+        "en": "⚙️ *Settings*\n\nChoose a language for bot messages:",
+        "ru": "⚙️ *Настройки*\n\nВыберите язык сообщений бота:",
+    },
+    "kb_lang_en": {"en": "🇺🇸 English", "ru": "🇺🇸 English"},
+    "kb_lang_ru": {"en": "🇷🇺 Русский", "ru": "🇷🇺 Русский"},
+    "language_set": {
+        "en": "✅ Language set to *English*\\.",
+        "ru": "✅ Язык изменён на *Русский*\\.",
+    },
 }
 
 

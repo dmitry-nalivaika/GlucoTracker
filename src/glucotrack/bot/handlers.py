@@ -60,6 +60,9 @@ _CGM_2H = "timing:2 hours after"
 _CGM_OTHER = "timing:other"
 _CONTINUE_SESSION = "session:continue"
 _NEW_SESSION = "session:new"
+# Settings — inline language selection
+_LANG_SET_EN = "lang_set:en"
+_LANG_SET_RU = "lang_set:ru"
 # Flat CGM timing buttons — shown directly in the photo classification keyboard
 _FLAT_CGM_BEFORE = "flat:before eating"
 _FLAT_CGM_AFTER_IMMEDIATE = "flat:right after eating"
@@ -113,8 +116,20 @@ def _cgm_timing_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
 def _session_action_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
     """Persistent reply keyboard shown when a session is open (feature 004)."""
     return ReplyKeyboardMarkup(
-        [["/done", "/cancel", "/status"]],
+        [["/done", "/cancel", "/status"], ["/settings"]],
         resize_keyboard=True,
+    )
+
+
+def _settings_language_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
+    """Inline keyboard for the /settings panel — language selection."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(_t("kb_lang_en", lang), callback_data=_LANG_SET_EN),
+                InlineKeyboardButton(_t("kb_lang_ru", lang), callback_data=_LANG_SET_RU),
+            ]
+        ]
     )
 
 
@@ -629,6 +644,39 @@ async def handle_language_command(update: Update, context: ContextTypes.DEFAULT_
     return SESSION_OPEN
 
 
+async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /settings — show inline language picker."""
+    assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
+    await update.message.reply_text(
+        formatters.fmt_settings_prompt(lang=lang),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=_settings_language_keyboard(lang),
+    )
+    return SESSION_OPEN
+
+
+async def handle_language_setting_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle inline language selection from /settings panel (lang_set: callbacks)."""
+    assert update.callback_query and update.effective_user
+    query = update.callback_query
+    await query.answer()
+
+    chosen_lang = query.data.replace("lang_set:", "")
+    async with _get_db_session() as db:
+        user_repo = UserRepository(db)
+        await user_repo.update_language(update.effective_user.id, chosen_lang)
+
+    context.user_data["lang"] = chosen_lang
+    await query.edit_message_text(
+        formatters.fmt_language_set(lang=chosen_lang),
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
+    return SESSION_OPEN
+
+
 def build_conversation_handler() -> ConversationHandler:
     """Build and return the main ConversationHandler."""
     return ConversationHandler(
@@ -636,6 +684,7 @@ def build_conversation_handler() -> ConversationHandler:
             CommandHandler("start", handle_start),
             CommandHandler("new", handle_new_session),
             CommandHandler("language", handle_language_command),
+            CommandHandler("settings", handle_settings),
             MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_activity_text),
         ],
@@ -650,6 +699,8 @@ def build_conversation_handler() -> ConversationHandler:
                 CommandHandler("help", handle_help),
                 CommandHandler("new", handle_new_session),
                 CommandHandler("language", handle_language_command),
+                CommandHandler("settings", handle_settings),
+                CallbackQueryHandler(handle_language_setting_callback, pattern=r"^lang_set:"),
             ],
             PHOTO_TYPE_PROMPT: [
                 CallbackQueryHandler(handle_photo_type_callback, pattern=r"^(type:|flat:)"),

@@ -215,3 +215,13 @@ def fmt_language_error(unsupported_code: str, *, lang: str = "en") -> str:
 def fmt_language_usage(*, lang: str = "en") -> str:
     """Usage hint when /language is called with no argument."""
     return i18n.t("language_usage", lang)
+
+
+def fmt_settings_prompt(*, lang: str = "en") -> str:
+    """Intro text for the /settings inline language picker."""
+    return i18n.t("settings_prompt", lang)
+
+
+def fmt_language_set(*, lang: str = "en") -> str:
+    """Confirmation after inline language selection."""
+    return i18n.t("language_set", lang)
