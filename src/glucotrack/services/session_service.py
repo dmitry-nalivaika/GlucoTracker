@@ -5,6 +5,7 @@ Handles idle gap detection (FR-013) and session auto-expiry (FR-012).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, timedelta
 
@@ -103,10 +104,11 @@ class SessionService:
         """
         session, _ = await self.get_or_open_session(telegram_user_id)
         ext = "jpg"
+        file_hash = hashlib.sha256(telegram_file_id.encode()).hexdigest()[:16]
         if entry_type == "food":
-            filename = f"food_{telegram_file_id[:8]}.{ext}"
+            filename = f"food_{file_hash}.{ext}"
         else:
-            filename = f"cgm_{telegram_file_id[:8]}.{ext}"
+            filename = f"cgm_{file_hash}.{ext}"
 
         file_path = self._storage.save_file(telegram_user_id, session.id, filename, file_data)
 
