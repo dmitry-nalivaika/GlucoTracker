@@ -271,11 +271,15 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         call_order: list[str] = []
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             call_order.append("frame")
             return "frame-first-test"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             call_order.append("image")
             return "img-id"
 
@@ -307,10 +311,14 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         upload_types: list[str] = []
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-order-test"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             upload_types.append(image["type"])
             return "img-id"
 
@@ -346,10 +354,14 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         sticky_contents: list[str] = []
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-placeholder-test"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             return None  # Simulate upload failure for all images
 
         async def mock_add_sticky_note(
@@ -384,10 +396,14 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         sticky_call_count = 0
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-sections-test"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             return "img-id"
 
         async def mock_add_sticky_note(
@@ -419,10 +435,14 @@ class TestMiroServiceEnhancedCard:
         service = _make_service()
         analysis = _make_analysis()
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "expected-frame-id"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             return "img-id"
 
         async def mock_add_sticky_note(
@@ -452,10 +472,14 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         placeholder_positions: list[dict] = []
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-id"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             return None  # All uploads fail → placeholders created for each
 
         async def mock_add_sticky_note(
@@ -531,10 +555,14 @@ class TestMiroServiceEnhancedCard:
         analysis = _make_analysis()
         sticky_positions: list[dict] = []
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-id"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             return "img-id"
 
         async def mock_add_sticky_note(
@@ -609,10 +637,14 @@ class TestMiroServiceEnhancedCard:
         upload_calls: list[str] = []
         sticky_call_count = 0
 
-        async def mock_create_frame(title: str, user_id: int, n_images: int) -> str:
+        async def mock_create_frame(
+            title: str, user_id: int, n_images: int, **kwargs: object
+        ) -> str:
             return "frame-resilience-test"
 
-        async def mock_upload_image(frame_id: str, image: dict, idx: int) -> str | None:
+        async def mock_upload_image(
+            frame_id: str, image: dict, idx: int, **kwargs: object
+        ) -> str | None:
             upload_calls.append(image["telegram_file_id"])
             if idx == 0:
                 return None  # First image fails
@@ -986,3 +1018,208 @@ class TestMiroSectionTextRussian:
         assert (
             "скриншот" in text.lower() or "чёткий" in text.lower() or "нечитаем" in text.lower()
         ), f"Expected Russian CGM-unreadable text in:\n{text}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature 004: RAG badge, executive summary, single-row photos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestMiroRAGBadge:
+    """RAG status badge in glucose section (feature 004, T021)."""
+
+    def _make_glucose_analysis(self, in_range_values: list[bool | None]) -> MagicMock:
+        analysis = _make_analysis()
+        analysis.glucose_curve_json = json.dumps(
+            [
+                {
+                    "timing_label": f"t{i}",
+                    "estimated_value_mg_dl": 100,
+                    "in_range": v,
+                    "notes": "",
+                    "curve_shape_label": "",
+                }
+                for i, v in enumerate(in_range_values)
+            ]
+        )
+        analysis.raw_response = json.dumps({"cgm_parseable": True})
+        return analysis
+
+    def test_rag_badge_green_when_all_in_range(self) -> None:
+        service = _make_service()
+        analysis = self._make_glucose_analysis([True, True, True])
+        text = service._build_section_text(analysis, "glucose")
+        assert "🟢" in text, f"Expected 🟢 badge for all-in-range glucose, got:\n{text}"
+
+    def test_rag_badge_amber_when_half_in_range(self) -> None:
+        service = _make_service()
+        analysis = self._make_glucose_analysis([True, False])
+        text = service._build_section_text(analysis, "glucose")
+        assert "🟡" in text, f"Expected 🟡 badge for 50% in-range, got:\n{text}"
+
+    def test_rag_badge_red_when_mostly_out(self) -> None:
+        service = _make_service()
+        analysis = self._make_glucose_analysis([False, False, True])
+        text = service._build_section_text(analysis, "glucose")
+        assert "🔴" in text, f"Expected 🔴 badge for < 50% in-range, got:\n{text}"
+
+    def test_rag_badge_unknown_when_no_data(self) -> None:
+        service = _make_service()
+        analysis = self._make_glucose_analysis([None, None])
+        text = service._build_section_text(analysis, "glucose")
+        assert "⬜" in text, f"Expected ⬜ badge when no in_range data, got:\n{text}"
+
+    def test_rag_badge_green_at_exactly_80_percent(self) -> None:
+        service = _make_service()
+        analysis = self._make_glucose_analysis([True, True, True, True, False])  # 80%
+        text = service._build_section_text(analysis, "glucose")
+        assert "🟢" in text, f"Expected 🟢 badge at exactly 80%, got:\n{text}"
+
+
+class TestMiroExecutiveSummary:
+    """Executive summary section in Miro card (feature 004, T022)."""
+
+    def _make_analysis_with_summary(
+        self,
+        summary: str = "Good session. Glucose was stable.",
+        encouragement: str = "Keep up the great work!",
+    ) -> MagicMock:
+        analysis = _make_analysis()
+        analysis.raw_response = json.dumps(
+            {
+                "executive_summary": summary,
+                "encouragement": encouragement,
+                "cgm_parseable": True,
+            }
+        )
+        return analysis
+
+    def test_executive_summary_section_contains_summary_text(self) -> None:
+        service = _make_service()
+        analysis = self._make_analysis_with_summary(summary="Glucose was well-controlled.")
+        text = service._build_section_text(analysis, "summary")
+        assert (
+            "Glucose was well-controlled" in text
+        ), f"Expected summary text in section, got:\n{text}"
+
+    def test_executive_summary_section_contains_encouragement_text(self) -> None:
+        service = _make_service()
+        analysis = self._make_analysis_with_summary(encouragement="Excellent logging habits!")
+        text = service._build_section_text(analysis, "summary")
+        assert (
+            "Excellent logging habits" in text
+        ), f"Expected encouragement text in section, got:\n{text}"
+
+    def test_executive_summary_section_fallback_when_fields_absent(self) -> None:
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.raw_response = json.dumps({"cgm_parseable": True})  # no summary/encouragement
+        text = service._build_section_text(analysis, "summary")
+        # Should not raise; should contain fallback text
+        assert len(text) > 0
+        assert "Summary not available" in text or "Итог" in text or "Session Summary" in text
+
+    def test_executive_summary_section_russian_header(self) -> None:
+        service = _make_service()
+        analysis = self._make_analysis_with_summary()
+        text = service._build_section_text(analysis, "summary", lang="ru")
+        assert "Итоги" in text, f"Expected Russian header 'Итоги' in:\n{text}"
+
+
+class TestMiroSingleRowLayout:
+    """Single-row photo layout (feature 004, T023)."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_single_row_layout_positions_all_images_in_row_0(self) -> None:
+        """All images must be uploaded with y-positions in the first (only) row."""
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.raw_response = json.dumps(
+            {"cgm_parseable": True, "executive_summary": "", "encouragement": ""}
+        )
+
+        # Mock frame creation
+        respx.post("https://api.miro.com/v2/boards/test-board-id/frames").mock(
+            return_value=httpx.Response(201, json={"id": "frame-001"})
+        )
+
+        uploaded_positions: list[dict] = []
+
+        def capture_image_upload(request: httpx.Request) -> httpx.Response:
+            import json as _json
+
+            data_str = request.content.decode("utf-8", errors="replace")
+            # Extract the 'data' JSON field from the multipart body
+            try:
+                start = data_str.find('{"title"')
+                end = data_str.find("\r\n", start)
+                pos_data = _json.loads(data_str[start:end])
+                uploaded_positions.append(pos_data["position"])
+            except Exception:
+                pass
+            return httpx.Response(201, json={"id": "img-001"})
+
+        respx.post("https://api.miro.com/v2/boards/test-board-id/images").mock(
+            side_effect=capture_image_upload
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/sticky_notes").mock(
+            return_value=httpx.Response(201, json={"id": "note-001"})
+        )
+
+        images = [
+            {"type": "food", "file_bytes": b"food1", "telegram_file_id": "f1"},
+            {"type": "cgm", "file_bytes": b"cgm1", "telegram_file_id": "c1"},
+            {"type": "cgm", "file_bytes": b"cgm2", "telegram_file_id": "c2"},
+        ]
+        await service.create_enhanced_session_card(analysis, images)
+
+        # All images must be in the same single row (all y-values identical)
+        assert (
+            len(uploaded_positions) == 3
+        ), f"Expected 3 image uploads, got {len(uploaded_positions)}"
+        y_values = [p["y"] for p in uploaded_positions]
+        assert (
+            len(set(y_values)) == 1
+        ), f"Images are in multiple rows (single-row layout required): y-values={y_values}"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_single_row_frame_width_scales_with_image_count(self) -> None:
+        """Frame width must be >= 1200 and scale when there are many images."""
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.raw_response = json.dumps(
+            {"cgm_parseable": True, "executive_summary": "", "encouragement": ""}
+        )
+
+        captured_frame_width: list[int] = []
+
+        def capture_frame(request: httpx.Request) -> httpx.Response:
+            import json as _json
+
+            body = _json.loads(request.content)
+            captured_frame_width.append(body["geometry"]["width"])
+            return httpx.Response(201, json={"id": "frame-001"})
+
+        respx.post("https://api.miro.com/v2/boards/test-board-id/frames").mock(
+            side_effect=capture_frame
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/images").mock(
+            return_value=httpx.Response(201, json={"id": "img-001"})
+        )
+        respx.post("https://api.miro.com/v2/boards/test-board-id/sticky_notes").mock(
+            return_value=httpx.Response(201, json={"id": "note-001"})
+        )
+
+        images = [
+            {"type": "food", "file_bytes": b"f", "telegram_file_id": f"f{i}"}
+            for i in range(5)  # 5 images should exceed 1200px
+        ]
+        await service.create_enhanced_session_card(analysis, images)
+
+        assert captured_frame_width, "Frame creation was not called"
+        # 5 images × 300 px each + 40 px padding > 1200 → frame must expand
+        assert (
+            captured_frame_width[0] > 1200
+        ), f"Frame width {captured_frame_width[0]} should exceed 1200 for 5 images in single row"

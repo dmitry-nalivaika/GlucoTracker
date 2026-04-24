@@ -74,9 +74,7 @@ class UserRepository:
 
     async def get_all_with_chat_id(self) -> list[User]:
         """Return all users who have a non-null chat_id (for online broadcast)."""
-        result = await self._db.execute(
-            select(User).where(User.chat_id.is_not(None))
-        )
+        result = await self._db.execute(select(User).where(User.chat_id.is_not(None)))
         return list(result.scalars().all())
 
     async def update_last_seen(self, telegram_user_id: int) -> User:

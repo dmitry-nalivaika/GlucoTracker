@@ -75,7 +75,9 @@ use 'No activity to analyse.' when description is null>"
   ],
   "target_range_note": "<string: summary of 70-140 mg/dL compliance>",
   "cgm_parseable": <boolean: true if you could read the CGM screenshot>,
-  "cgm_parse_error": "<string: reason if cgm_parseable is false, else null>"
+  "cgm_parse_error": "<string: reason if cgm_parseable is false, else null>",
+  "executive_summary": "<2-3 sentences: food consumed, glucose response, key insight>",
+  "encouragement": "<1 sentence of positive feedback or encouragement for the user>"
 }
 
 The healthy glucose target range is 70–140 mg/dL. Explicitly note any readings \

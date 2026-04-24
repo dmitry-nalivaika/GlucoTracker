@@ -163,3 +163,52 @@ class TestClaudeEnhancedAPISchemaContract:
         assert restored["description"] == activity["description"]
         assert restored["glucose_modulation"] == activity["glucose_modulation"]
         assert restored["effect_summary"] == activity["effect_summary"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature 004 contract tests: executive_summary + encouragement fields
+# ─────────────────────────────────────────────────────────────────────────────
+
+FEATURE_004_VALID_RESPONSE = {
+    **{k: v for k, v in ENHANCED_VALID_RESPONSE.items()},
+    "executive_summary": (
+        "The user consumed a moderate-GI meal and maintained glucose within the target range. "
+        "A 30-minute walk after eating contributed to a controlled post-meal response. "
+        "Overall a well-managed session."
+    ),
+    "encouragement": "Excellent work combining exercise with a balanced meal to keep glucose stable!",
+}
+
+
+class TestAIContractFeature004:
+    """Contract tests for feature 004 AI response fields."""
+
+    def test_executive_summary_field_present(self) -> None:
+        """executive_summary must be a non-empty string."""
+        assert "executive_summary" in FEATURE_004_VALID_RESPONSE
+        summary = FEATURE_004_VALID_RESPONSE["executive_summary"]
+        assert isinstance(summary, str) and len(summary) > 0
+
+    def test_executive_summary_is_multiple_sentences(self) -> None:
+        """executive_summary must contain 2-3 sentences (per contract)."""
+        summary = FEATURE_004_VALID_RESPONSE["executive_summary"]
+        sentence_count = summary.count(".")
+        assert sentence_count >= 2, f"executive_summary should have 2+ sentences: {summary!r}"
+
+    def test_encouragement_field_present(self) -> None:
+        """encouragement must be a non-empty string."""
+        assert "encouragement" in FEATURE_004_VALID_RESPONSE
+        enc = FEATURE_004_VALID_RESPONSE["encouragement"]
+        assert isinstance(enc, str) and len(enc) > 0
+
+    def test_prompt_contains_executive_summary_field(self) -> None:
+        """SESSION_ANALYSIS_SYSTEM_PROMPT must mention executive_summary."""
+        assert (
+            "executive_summary" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include 'executive_summary' field definition"
+
+    def test_prompt_contains_encouragement_field(self) -> None:
+        """SESSION_ANALYSIS_SYSTEM_PROMPT must mention encouragement."""
+        assert (
+            "encouragement" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include 'encouragement' field definition"

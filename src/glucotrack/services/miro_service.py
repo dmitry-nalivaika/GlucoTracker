@@ -13,7 +13,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import math
 from typing import Any
 
 import httpx
@@ -192,14 +191,16 @@ class MiroService:
 
     # ── Enhanced card helpers (feature 002) ───────────────────────────────────
 
-    async def _create_frame(self, title: str, user_id: int, n_images: int) -> str:
+    async def _create_frame(
+        self, title: str, user_id: int, n_images: int, frame_width: int = _FRAME_WIDTH
+    ) -> str:
         """Create a Miro Frame container.
 
         Returns the frame ID from the 201 response.
         Raises MiroError on unrecoverable failure.
         """
-        n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
-        n_section_rows = 3  # fixed 2×3 grid: (food|glucose), (recs|correlation), (activity|header)
+        n_image_rows = 1 if n_images > 0 else 0  # single-row layout (feature 004)
+        n_section_rows = 4  # 2×3 grid + summary row (feature 004)
         section_block = n_section_rows * (_SECTION_HEIGHT + _SECTION_GAP)
         frame_height = (
             _IMAGE_Y_START
@@ -218,7 +219,7 @@ class MiroService:
         payload: dict[str, Any] = {
             "data": {"title": title, "format": "custom", "type": "freeform"},
             "position": {"x": 0, "y": 0, "origin": "center"},
-            "geometry": {"width": _FRAME_WIDTH, "height": frame_height},
+            "geometry": {"width": frame_width, "height": frame_height},
         }
 
         async with httpx.AsyncClient() as client:
@@ -243,15 +244,23 @@ class MiroService:
                 )
         raise MiroError("Miro frame creation failed — no successful response")
 
-    async def _upload_image(self, frame_id: str, image: dict[str, Any], idx: int) -> str | None:
+    async def _upload_image(
+        self,
+        frame_id: str,
+        image: dict[str, Any],
+        idx: int,
+        images_per_row: int = _IMAGES_PER_ROW,
+        frame_width: int = _FRAME_WIDTH,
+    ) -> str | None:
         """Upload a single image as a child item of the frame.
 
         Returns image item ID on success, None on failure (FR-011).
         """
-        # Miro uses origin:center — compute row/col to support multiple rows of images
-        col = idx % _IMAGES_PER_ROW
-        row = idx // _IMAGES_PER_ROW
-        x_center = _IMAGE_X_STEP * col + 20 + _IMAGE_WIDTH // 2
+        # Single-row layout: all images in row 0, distributed evenly across frame_width
+        col = idx % images_per_row
+        row = idx // images_per_row
+        x_step = frame_width // images_per_row
+        x_center = x_step * col + x_step // 2
         y_center = _IMAGE_Y_START + row * _IMAGE_ROW_HEIGHT + _IMAGE_HEIGHT // 2
         data_field = json.dumps(
             {
@@ -371,6 +380,26 @@ class MiroService:
                 )
         raise MiroError("Sticky note creation failed — no successful response")
 
+    @staticmethod
+    def _compute_rag_badge(glucose_curve: list[dict[str, Any]]) -> str:
+        """Return a RAG emoji badge based on the fraction of in-range readings.
+
+        🟢 Green  : ≥ 80 % in range
+        🟡 Amber  : 50–79 % in range
+        🔴 Red    : < 50 % in range
+        ⬜ Unknown: no readings with known in_range value
+        """
+        known = [p for p in glucose_curve if p.get("in_range") is not None]
+        if not known:
+            return "⬜"
+        in_range_count = sum(1 for p in known if p.get("in_range") is True)
+        ratio = in_range_count / len(known)
+        if ratio >= 0.8:
+            return "🟢"
+        if ratio >= 0.5:
+            return "🟡"
+        return "🔴"
+
     def _build_section_text(self, analysis: Any, section: str, lang: str = "en") -> str:
         """Build formatted text content for a sticky note section.
 
@@ -425,7 +454,8 @@ class MiroService:
         if section == "glucose":
             try:
                 glucose_curve = json.loads(analysis.glucose_curve_json)
-                lines = [_t("miro_glucose_header", lang) + "\n"]
+                rag = self._compute_rag_badge(glucose_curve)
+                lines = [f"{rag} {_t('miro_glucose_header', lang)}\n"]
                 for point in glucose_curve:
                     label = point.get("timing_label", "?")
                     value = point.get("estimated_value_mg_dl", "?")
@@ -491,6 +521,25 @@ class MiroService:
             except (json.JSONDecodeError, TypeError, AttributeError):
                 return fallback
 
+        if section == "summary":
+            try:
+                raw = json.loads(analysis.raw_response) if analysis.raw_response else {}
+                summary_hdr = _t("miro_summary_header", lang)
+                exec_summary = raw.get("executive_summary") or ""
+                encouragement = raw.get("encouragement") or ""
+                if not exec_summary and not encouragement:
+                    return f"{summary_hdr}\n\n{_t('miro_summary_unavailable', lang)}"
+                lines = [summary_hdr + "\n"]
+                if exec_summary:
+                    lines.append(exec_summary)
+                if encouragement:
+                    lines.append(f"\n✨ {encouragement}")
+                return "\n".join(lines)
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                hdr = _t("miro_summary_header", lang)
+                unavail = _t("miro_summary_unavailable", lang)
+                return f"{hdr}\n\n{unavail}"
+
         return fallback
 
     async def create_enhanced_session_card(
@@ -517,32 +566,42 @@ class MiroService:
             timestamp = "unknown time"
 
         title = f"GlucoTrack Session — {timestamp} [User #{anon_id}]"
-        n_images = len(session_images)
 
-        # Step 1: Create frame (raises MiroError on failure)
-        frame_id = await self._create_frame(
-            title=title, user_id=analysis.user_id, n_images=n_images
-        )
-        logger.info("Created Miro frame %s for analysis %s", frame_id, analysis.id)
-
-        # When an item has parent.id, Miro treats position x,y as frame-relative
-        # (measured from the frame's top-left corner with origin: center for the item),
-        # matching the same convention used by the multipart image upload endpoint.
-        # FixedRatioNoRotationGeometry accepts EITHER width OR height, not both.
-        n_image_rows = math.ceil(n_images / _IMAGES_PER_ROW) if n_images > 0 else 0
-
-        # Step 2: Upload images (food first, then CGM)
+        # Compute ordered images first so we know the count for layout (T029)
         food_images = [img for img in session_images if img.get("type") == "food"]
         cgm_images = [img for img in session_images if img.get("type") == "cgm"]
         ordered_images = food_images + cgm_images
+        n_images = len(ordered_images)
 
+        # Single-row layout: all images in one row, frame width scales with count (T029)
+        images_per_row = max(1, n_images)
+        frame_width = max(_FRAME_WIDTH, images_per_row * 300 + 40)
+        n_image_rows = 1 if n_images > 0 else 0
+
+        # Step 1: Create frame (raises MiroError on failure)
+        frame_id = await self._create_frame(
+            title=title, user_id=analysis.user_id, n_images=n_images, frame_width=frame_width
+        )
+        logger.info("Created Miro frame %s for analysis %s", frame_id, analysis.id)
+
+        # Step 2: Upload images (food first, then CGM)
+        # When an item has parent.id, Miro treats position x,y as frame-relative
+        # (measured from the frame's top-left corner with origin: center for the item).
+        # FixedRatioNoRotationGeometry accepts EITHER width OR height, not both.
         for idx, image in enumerate(ordered_images):
-            img_id = await self._upload_image(frame_id=frame_id, image=image, idx=idx)
+            img_id = await self._upload_image(
+                frame_id=frame_id,
+                image=image,
+                idx=idx,
+                images_per_row=images_per_row,
+                frame_width=frame_width,
+            )
             if img_id is None:
                 # FR-011: placeholder sticky note at the image's frame-relative position
-                col = idx % _IMAGES_PER_ROW
-                row = idx // _IMAGES_PER_ROW
-                x_center = _IMAGE_X_STEP * col + 20 + _IMAGE_WIDTH // 2
+                col = idx % images_per_row
+                row = idx // images_per_row
+                x_step = frame_width // images_per_row
+                x_center = x_step * col + x_step // 2
                 y_center = _IMAGE_Y_START + row * _IMAGE_ROW_HEIGHT + _IMAGE_HEIGHT // 2
                 try:
                     await self._add_sticky_note(
@@ -555,14 +614,18 @@ class MiroService:
                 except MiroError as exc:
                     logger.warning("Failed to add image placeholder: %s", exc)
 
-        # Step 3: Add 5 analysis sections + header in a 2-column × 3-row grid
-        # Layout: food | glucose  /  recommendations | correlation  /  activity | header
+        # Step 3: Add analysis sections in a 2-column × 3-row grid + 1 full-width summary row
+        # Layout row 0: food | glucose
+        #         row 1: recommendations | correlation
+        #         row 2: activity | header
+        #         row 3: summary (full width, centred)
         section_y_start = _IMAGE_Y_START + n_image_rows * _IMAGE_ROW_HEIGHT + _SECTION_TOP_MARGIN
         col_centers = [
-            _FRAME_WIDTH * (2 * c + 1) // (2 * _SECTION_COLS) for c in range(_SECTION_COLS)
-        ]  # [300, 900] for a 1200px frame split into 2 columns
+            frame_width * (2 * c + 1) // (2 * _SECTION_COLS) for c in range(_SECTION_COLS)
+        ]  # e.g. [300, 900] for a 1200px frame split into 2 columns
 
-        section_grid = [
+        _COL_FULL = -1  # sentinel: section spans full frame width
+        section_grid: list[tuple[str, int, int]] = [
             # (section_name_or_sentinel, row, col)
             ("food", 0, 0),
             ("glucose", 0, 1),
@@ -570,11 +633,17 @@ class MiroService:
             ("correlation", 1, 1),
             ("activity", 2, 0),
             ("_header", 2, 1),  # analysis header / separator note
+            ("summary", 3, _COL_FULL),  # full-width summary row (T030)
         ]
 
         for section_name, row, col in section_grid:
-            x = col_centers[col]
             y = section_y_start + row * (_SECTION_HEIGHT + _SECTION_GAP)
+            if col == _COL_FULL:
+                x = frame_width // 2
+                width = frame_width - 40
+            else:
+                x = col_centers[col]
+                width = _SECTION_WIDTH
             if section_name == "_header":
                 content = "─── Analysis ───────────────────────"
                 style = _STYLE_SEPARATOR
@@ -592,7 +661,7 @@ class MiroService:
                     content=content,
                     style=style,
                     position={"x": x, "y": y},
-                    geometry={"width": _SECTION_WIDTH},
+                    geometry={"width": width},
                 )
             except MiroError as exc:
                 logger.warning("Failed to add section '%s': %s", section_name, exc)
