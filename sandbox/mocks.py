@@ -104,6 +104,7 @@ class MockAIService:
         cgm_entries: list[dict[str, Any]],
         activity_entries: list[dict[str, Any]],
         load_file_bytes: Any,
+        language: str = "en",
     ) -> dict[str, Any]:
         """Return pre-baked analysis response after simulated latency."""
         await asyncio.sleep(self._latency)
@@ -138,6 +139,7 @@ class MockMiroService:
         self,
         analysis: Any,
         session_images: list[dict[str, Any]] | None = None,
+        lang: str = "en",
     ) -> str:
         """Return a fake frame ID after simulated latency (feature 002)."""
         await asyncio.sleep(self._latency)
