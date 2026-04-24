@@ -674,6 +674,10 @@ async def handle_language_setting_callback(
     await query.answer()
 
     chosen_lang = query.data.replace("lang_set:", "")
+    # Validate against the whitelist — callback data is user-controlled (Constitution V)
+    if chosen_lang not in {m.value for m in SupportedLanguage}:
+        return SESSION_OPEN
+
     async with _get_db_session() as db:
         user_repo = UserRepository(db)
         await user_repo.update_language(update.effective_user.id, chosen_lang)
