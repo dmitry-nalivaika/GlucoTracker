@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -19,6 +21,17 @@ async def test_db() -> AsyncSession:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         yield session
+        # Drain any background tasks spawned during the test (e.g., fire-and-forget
+        # asyncio.create_task calls in AnalysisService._create_miro_card_safe) before
+        # the session is closed.  Without this, in-flight commits race with teardown
+        # and raise IllegalStateChangeError on slower CI runners.
+        pending = [
+            t
+            for t in asyncio.all_tasks()
+            if t is not asyncio.current_task() and not t.done()
+        ]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
     await engine.dispose()
 
 
