@@ -308,10 +308,7 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
         async with _session_service(context) as service:
             if query.data == _FOOD:
                 await service.handle_photo(user_id, bytes(file_bytes), file_id, entry_type="food")
-                await query.edit_message_text(
-                    formatters.fmt_food_ack(lang=lang, guided=True),
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                )
+                ack_text = formatters.fmt_food_ack(lang=lang, guided=True)
             else:  # _NOT_SURE
                 await service.handle_photo(
                     user_id,
@@ -320,10 +317,15 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
                     entry_type="food",
                     description="[unclassified — user unsure]",
                 )
-                await query.edit_message_text(
-                    _t("image_saved_clarify", lang),
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                )
+                ack_text = _t("image_saved_clarify", lang)
+        # Clear inline keyboard then send ack as new message with session keyboard restored
+        await query.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=ack_text,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
+        )
 
     except Exception as exc:
         logger.exception("handle_photo_type_callback error: %s", exc)
@@ -432,7 +434,9 @@ async def handle_activity_text(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as exc:
         logger.exception("handle_activity_text error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
         )
     return SESSION_OPEN
 
