@@ -35,6 +35,7 @@ class User(Base):  # type: ignore[misc]
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
     language_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # Relationships
     sessions: Mapped[list[Session]] = relationship(  # type: ignore[name-defined]

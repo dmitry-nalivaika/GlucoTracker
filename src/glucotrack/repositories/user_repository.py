@@ -63,6 +63,22 @@ class UserRepository:
         logger.debug("Updated language for user %d to %s", telegram_user_id, language_code)
         return user
 
+    async def update_chat_id(self, telegram_user_id: int, chat_id: int) -> None:
+        """Persist Telegram chat_id for the user (used for broadcast, feature 004)."""
+        user = await self.get_by_telegram_id(telegram_user_id)
+        if user is None:
+            return
+        user.chat_id = chat_id
+        await self._db.flush()
+        logger.debug("Stored chat_id=%d for user %d", chat_id, telegram_user_id)
+
+    async def get_all_with_chat_id(self) -> list[User]:
+        """Return all users who have a non-null chat_id (for online broadcast)."""
+        result = await self._db.execute(
+            select(User).where(User.chat_id.is_not(None))
+        )
+        return list(result.scalars().all())
+
     async def update_last_seen(self, telegram_user_id: int) -> User:
         """Update last_seen_at for the given user and return the updated record."""
         user = await self.get_by_telegram_id(telegram_user_id)

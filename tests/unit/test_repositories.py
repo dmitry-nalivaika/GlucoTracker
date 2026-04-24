@@ -178,6 +178,52 @@ class TestSessionRepository:
         assert counts["activity"] == 0
 
 
+class TestUserRepositoryChatId:
+    """Tests for chat_id storage methods (feature 004)."""
+
+    @pytest.mark.asyncio
+    async def test_update_chat_id_stores_value(self, test_db):
+        repo = UserRepository(test_db)
+        await repo.create(telegram_user_id=200)
+        await repo.update_chat_id(200, 999111)
+        user = await repo.get_by_telegram_id(200)
+        assert user is not None
+        assert user.chat_id == 999111
+
+    @pytest.mark.asyncio
+    async def test_update_chat_id_overwrites_existing(self, test_db):
+        repo = UserRepository(test_db)
+        await repo.create(telegram_user_id=201)
+        await repo.update_chat_id(201, 111)
+        await repo.update_chat_id(201, 222)
+        user = await repo.get_by_telegram_id(201)
+        assert user is not None
+        assert user.chat_id == 222
+
+    @pytest.mark.asyncio
+    async def test_get_all_with_chat_id_returns_users_with_chat_id(self, test_db):
+        repo = UserRepository(test_db)
+        u1 = await repo.create(telegram_user_id=301)
+        u2 = await repo.create(telegram_user_id=302)
+        await repo.create(telegram_user_id=303)  # no chat_id
+        await repo.update_chat_id(u1.telegram_user_id, 10001)
+        await repo.update_chat_id(u2.telegram_user_id, 10002)
+        results = await repo.get_all_with_chat_id()
+        ids = [u.telegram_user_id for u in results]
+        assert 301 in ids
+        assert 302 in ids
+        assert 303 not in ids
+
+    @pytest.mark.asyncio
+    async def test_get_all_with_chat_id_returns_empty_when_none(self, test_db):
+        repo = UserRepository(test_db)
+        await repo.create(telegram_user_id=401)
+        results = await repo.get_all_with_chat_id()
+        # Filter to only our test user
+        ids = [u.telegram_user_id for u in results]
+        assert 401 not in ids
+
+
 class TestAnalysisRepository:
     """Tests for AnalysisRepository — feature 002 additions."""
 
