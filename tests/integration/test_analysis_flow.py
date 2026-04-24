@@ -228,14 +228,14 @@ class TestAnalysisFlow:
 
         # Check that the new method is wired — either called directly or via create_task
         # The mock_miro.create_enhanced_session_card should be called with analysis + session_images
-        assert mock_miro.create_enhanced_session_card.called or mock_miro.create_session_card.called, (
-            "Either create_enhanced_session_card or create_session_card must be called"
-        )
+        assert (
+            mock_miro.create_enhanced_session_card.called or mock_miro.create_session_card.called
+        ), "Either create_enhanced_session_card or create_session_card must be called"
 
         # Specifically check create_enhanced_session_card was called (not the old method)
-        assert mock_miro.create_enhanced_session_card.called, (
-            "create_enhanced_session_card must be called for feature 002"
-        )
+        assert (
+            mock_miro.create_enhanced_session_card.called
+        ), "create_enhanced_session_card must be called for feature 002"
         call_kwargs = mock_miro.create_enhanced_session_card.call_args
         assert call_kwargs is not None
         # session_images arg should contain at least one entry with correct structure
@@ -283,7 +283,9 @@ class TestAnalysisFlow:
             def sticky_side_effect(request: httpx.Request) -> httpx.Response:
                 nonlocal sticky_call_count
                 sticky_call_count += 1
-                return httpx.Response(201, json={"id": f"sn-{sticky_call_count}", "type": "sticky_note", "data": {}})
+                return httpx.Response(
+                    201, json={"id": f"sn-{sticky_call_count}", "type": "sticky_note", "data": {}}
+                )
 
             respx.post("https://api.miro.com/v2/boards/test-board/sticky_notes").mock(
                 side_effect=sticky_side_effect
@@ -316,9 +318,9 @@ class TestAnalysisFlow:
 
         # All 5 sections + separator (and placeholder sticky notes for failed images) created
         # At minimum: 6 sticky notes (separator + 5 sections) + at least 1 placeholder
-        assert sticky_call_count >= 6, (
-            f"Expected ≥6 sticky notes even with image failures, got {sticky_call_count}"
-        )
+        assert (
+            sticky_call_count >= 6
+        ), f"Expected ≥6 sticky notes even with image failures, got {sticky_call_count}"
 
     @pytest.mark.asyncio
     async def test_miro_card_status_updated_to_created_on_success(
@@ -351,11 +353,18 @@ class TestAnalysisFlow:
             respx.post("https://api.miro.com/v2/boards/test-board2/images").mock(
                 return_value=httpx.Response(
                     201,
-                    json={"id": "img-001", "type": "image", "data": {}, "parent": {"id": "frame-status-test"}},
+                    json={
+                        "id": "img-001",
+                        "type": "image",
+                        "data": {},
+                        "parent": {"id": "frame-status-test"},
+                    },
                 )
             )
             respx.post("https://api.miro.com/v2/boards/test-board2/sticky_notes").mock(
-                return_value=httpx.Response(201, json={"id": "sn-001", "type": "sticky_note", "data": {}})
+                return_value=httpx.Response(
+                    201, json={"id": "sn-001", "type": "sticky_note", "data": {}}
+                )
             )
 
             mock_ai = AsyncMock()
@@ -384,6 +393,6 @@ class TestAnalysisFlow:
         )
         miro_card = result.scalar_one_or_none()
         assert miro_card is not None
-        assert miro_card.status == MiroCardStatus.CREATED, (
-            f"Expected status=CREATED, got {miro_card.status}"
-        )
+        assert (
+            miro_card.status == MiroCardStatus.CREATED
+        ), f"Expected status=CREATED, got {miro_card.status}"

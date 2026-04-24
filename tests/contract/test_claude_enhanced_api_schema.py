@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from glucotrack.services.ai_service import SESSION_ANALYSIS_SYSTEM_PROMPT
 
 ENHANCED_VALID_RESPONSE = {
@@ -49,9 +47,7 @@ ENHANCED_VALID_RESPONSE = {
         "stable_zones": ["Fasting glucose was stable"],
         "summary": "The brown rice meal caused a moderate spike; the walk helped attenuate it.",
     },
-    "recommendations": [
-        {"priority": 1, "text": "Consider reducing the brown rice portion by 20%"}
-    ],
+    "recommendations": [{"priority": 1, "text": "Consider reducing the brown rice portion by 20%"}],
     "target_range_note": "Glucose remained within 70–140 mg/dL throughout the session.",
     "cgm_parseable": True,
     "cgm_parse_error": None,
@@ -74,29 +70,29 @@ class TestClaudeEnhancedAPISchemaContract:
 
     def test_system_prompt_contains_activity_section(self) -> None:
         """SESSION_ANALYSIS_SYSTEM_PROMPT must include 'activity' key."""
-        assert '"activity"' in SESSION_ANALYSIS_SYSTEM_PROMPT, (
-            "Prompt must define an 'activity' JSON section"
-        )
+        assert (
+            '"activity"' in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must define an 'activity' JSON section"
 
     def test_system_prompt_contains_gi_category(self) -> None:
-        assert "gi_category" in SESSION_ANALYSIS_SYSTEM_PROMPT, (
-            "Prompt must include gi_category in nutrition section"
-        )
+        assert (
+            "gi_category" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include gi_category in nutrition section"
 
     def test_system_prompt_contains_food_items(self) -> None:
-        assert "food_items" in SESSION_ANALYSIS_SYSTEM_PROMPT, (
-            "Prompt must include food_items in nutrition section"
-        )
+        assert (
+            "food_items" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include food_items in nutrition section"
 
     def test_system_prompt_contains_glucose_impact_narrative(self) -> None:
-        assert "glucose_impact_narrative" in SESSION_ANALYSIS_SYSTEM_PROMPT, (
-            "Prompt must include glucose_impact_narrative in nutrition section"
-        )
+        assert (
+            "glucose_impact_narrative" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include glucose_impact_narrative in nutrition section"
 
     def test_system_prompt_contains_curve_shape_label(self) -> None:
-        assert "curve_shape_label" in SESSION_ANALYSIS_SYSTEM_PROMPT, (
-            "Prompt must include curve_shape_label in glucose_curve entries"
-        )
+        assert (
+            "curve_shape_label" in SESSION_ANALYSIS_SYSTEM_PROMPT
+        ), "Prompt must include curve_shape_label in glucose_curve entries"
 
     # ── Response schema tests ─────────────────────────────────────────────────
 
@@ -122,17 +118,17 @@ class TestClaudeEnhancedAPISchemaContract:
         assert "glucose_impact_narrative" in nutrition
         # Must reference the target range
         narrative = nutrition["glucose_impact_narrative"]
-        assert "70" in narrative or "140" in narrative, (
-            "glucose_impact_narrative must reference 70–140 mg/dL range"
-        )
+        assert (
+            "70" in narrative or "140" in narrative
+        ), "glucose_impact_narrative must reference 70–140 mg/dL range"
 
     def test_glucose_curve_entries_have_curve_shape_label(self) -> None:
         curve = ENHANCED_VALID_RESPONSE["glucose_curve"]
         assert len(curve) >= 1
         for entry in curve:
-            assert "curve_shape_label" in entry, (
-                "Each glucose_curve entry must have curve_shape_label"
-            )
+            assert (
+                "curve_shape_label" in entry
+            ), "Each glucose_curve entry must have curve_shape_label"
 
     def test_no_activity_response_has_null_description(self) -> None:
         activity = NO_ACTIVITY_RESPONSE["activity"]

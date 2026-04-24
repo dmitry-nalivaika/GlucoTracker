@@ -182,9 +182,7 @@ class TestAnalysisRepository:
     """Tests for AnalysisRepository — feature 002 additions."""
 
     @pytest.mark.asyncio
-    async def test_save_analysis_persists_activity_json(
-        self, test_db, sample_user, sample_session
-    ):
+    async def test_save_analysis_persists_activity_json(self, test_db, sample_user, sample_session):
         """save_analysis() accepts and persists activity_json (T002)."""
         repo = AnalysisRepository(test_db)
         activity = {

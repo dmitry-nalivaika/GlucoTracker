@@ -30,8 +30,11 @@ from telegram.ext import (
 )
 
 from glucotrack.bot import formatters
+from glucotrack.bot.i18n import t as _t
 from glucotrack.domain.session import InsufficientEntriesError
+from glucotrack.models.user import SupportedLanguage
 from glucotrack.repositories.analysis_repository import InsufficientDataError
+from glucotrack.repositories.user_repository import UserRepository, effective_lang
 
 if TYPE_CHECKING:
     from glucotrack.services.session_service import SessionService
@@ -60,38 +63,67 @@ _CONTINUE_SESSION = "session:continue"
 _NEW_SESSION = "session:new"
 
 
-def _photo_type_keyboard() -> InlineKeyboardMarkup:
+def _photo_type_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🍽️ Food photo", callback_data=_FOOD),
-                InlineKeyboardButton("📈 CGM screenshot", callback_data=_CGM),
+                InlineKeyboardButton(_t("kb_food_photo", lang), callback_data=_FOOD),
+                InlineKeyboardButton(_t("kb_cgm_screenshot", lang), callback_data=_CGM),
             ],
-            [InlineKeyboardButton("🤷 Not sure", callback_data=_NOT_SURE)],
+            [InlineKeyboardButton(_t("kb_not_sure", lang), callback_data=_NOT_SURE)],
         ]
     )
 
 
-def _cgm_timing_keyboard() -> InlineKeyboardMarkup:
+def _cgm_timing_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("Before eating", callback_data=_CGM_BEFORE),
-                InlineKeyboardButton("Right after", callback_data=_CGM_AFTER_IMMEDIATE),
+                InlineKeyboardButton(_t("kb_before_eating", lang), callback_data=_CGM_BEFORE),
+                InlineKeyboardButton(
+                    _t("kb_right_after", lang), callback_data=_CGM_AFTER_IMMEDIATE
+                ),
             ],
             [
-                InlineKeyboardButton("1 hour after", callback_data=_CGM_1H),
-                InlineKeyboardButton("2 hours after", callback_data=_CGM_2H),
+                InlineKeyboardButton(_t("kb_1h_after", lang), callback_data=_CGM_1H),
+                InlineKeyboardButton(_t("kb_2h_after", lang), callback_data=_CGM_2H),
             ],
-            [InlineKeyboardButton("Other (type label)", callback_data=_CGM_OTHER)],
+            [InlineKeyboardButton(_t("kb_other_label", lang), callback_data=_CGM_OTHER)],
         ]
     )
 
 
-def _disambiguate_keyboard() -> ReplyKeyboardMarkup:
+def _disambiguate_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [["Continue session", "Start new session"]], one_time_keyboard=True, resize_keyboard=True
+        [[_t("kb_continue_session", lang), _t("kb_new_session", lang)]],
+        one_time_keyboard=True,
+        resize_keyboard=True,
     )
+
+
+@asynccontextmanager
+async def _get_db_session():  # type: ignore[return]
+    """Yield a bare AsyncSession (for handlers that need direct DB access)."""
+    from glucotrack.db import get_session
+
+    async with get_session() as db:
+        yield db
+
+
+async def _resolve_lang(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Return user's language from user_data cache, falling back to DB on cold start.
+
+    Populates user_data["lang"] so subsequent calls within the same session are instant.
+    """
+    lang = context.user_data.get("lang")
+    if lang is not None:
+        return str(lang)
+    async with _get_db_session() as db:
+        user_repo = UserRepository(db)  # type: ignore[arg-type]
+        user = await user_repo.get_by_telegram_id(user_id)
+        lang = effective_lang(user)
+    context.user_data["lang"] = lang
+    return lang
 
 
 @asynccontextmanager
@@ -126,33 +158,38 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             await service.get_or_open_session(update.effective_user.id, force_new=False)
         except Exception:
             pass
+    lang = await _resolve_lang(update.effective_user.id, context)
     await update.message.reply_text(
-        formatters.fmt_welcome(update.effective_user.first_name),
+        formatters.fmt_welcome(update.effective_user.first_name, lang=lang),
         parse_mode=ParseMode.MARKDOWN_V2,
     )
     return SESSION_OPEN
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    assert update.message
-    await update.message.reply_text(formatters.fmt_help(), parse_mode=ParseMode.MARKDOWN_V2)
+    assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
+    await update.message.reply_text(
+        formatters.fmt_help(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+    )
     return SESSION_OPEN
 
 
 async def handle_new_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /new — force-open a new session."""
     assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
     try:
         async with _session_service(context) as service:
             await service.get_or_open_session(update.effective_user.id, force_new=True)
         await update.message.reply_text(
-            "✅ New session started\\. Send a food photo to begin\\.",
+            _t("new_session_started", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
     except Exception as exc:
         logger.exception("handle_new_session error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
     return SESSION_OPEN
 
@@ -171,6 +208,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     else:
         return SESSION_OPEN
 
+    lang = await _resolve_lang(update.effective_user.id, context)
+
     try:
         from glucotrack.services.session_service import IdleGapDetected
 
@@ -180,22 +219,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             except IdleGapDetected as idle:
                 context.user_data["idle_session"] = idle.session
                 await update.message.reply_text(
-                    formatters.fmt_disambiguation_prompt(idle.idle_minutes),
+                    formatters.fmt_disambiguation_prompt(idle.idle_minutes, lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
-                    reply_markup=_disambiguate_keyboard(),
+                    reply_markup=_disambiguate_keyboard(lang),
                 )
                 return DISAMBIGUATE_SESSION
 
         await update.message.reply_text(
-            formatters.fmt_photo_type_prompt(),
+            formatters.fmt_photo_type_prompt(lang=lang),
             parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=_photo_type_keyboard(),
+            reply_markup=_photo_type_keyboard(lang),
         )
         return PHOTO_TYPE_PROMPT
     except Exception as exc:
         logger.exception("handle_photo error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
         return SESSION_OPEN
 
@@ -208,6 +247,7 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
 
     user_id = update.effective_user.id
     file_id = context.user_data.get("pending_file_id", "")
+    lang = await _resolve_lang(user_id, context)
 
     try:
         # Download photo bytes
@@ -217,9 +257,9 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
         if query.data == _CGM:
             context.user_data["pending_file_bytes"] = bytes(file_bytes)
             await query.edit_message_text(
-                formatters.fmt_cgm_timing_prompt(),
+                formatters.fmt_cgm_timing_prompt(lang=lang),
                 parse_mode=ParseMode.MARKDOWN_V2,
-                reply_markup=_cgm_timing_keyboard(),
+                reply_markup=_cgm_timing_keyboard(lang),
             )
             return CGM_TIMING_PROMPT
 
@@ -227,7 +267,7 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
             if query.data == _FOOD:
                 await service.handle_photo(user_id, bytes(file_bytes), file_id, entry_type="food")
                 await query.edit_message_text(
-                    formatters.fmt_food_ack(), parse_mode=ParseMode.MARKDOWN_V2
+                    formatters.fmt_food_ack(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:  # _NOT_SURE
                 await service.handle_photo(
@@ -238,14 +278,14 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
                     description="[unclassified — user unsure]",
                 )
                 await query.edit_message_text(
-                    "✅ Image saved\\. You can clarify its type when you use /done\\.",
+                    _t("image_saved_clarify", lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
 
     except Exception as exc:
         logger.exception("handle_photo_type_callback error: %s", exc)
         await query.edit_message_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
 
     return SESSION_OPEN
@@ -257,30 +297,38 @@ async def handle_cgm_timing_callback(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
 
+    lang = await _resolve_lang(update.effective_user.id, context)
+
     if query.data == _CGM_OTHER:
         await query.edit_message_text(
-            "Type your timing label \\(e\\.g\\. _3 hours after_, _fasting_\\):",
+            _t("cgm_timing_label_prompt", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
         return CGM_CUSTOM_TIMING
 
     timing_label = query.data.replace("timing:", "")
-    return await _save_cgm(update, context, timing_label)
+    return await _save_cgm(update, context, timing_label, lang=lang)
 
 
 async def handle_cgm_custom_timing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle free-text CGM timing label."""
     assert update.message and update.effective_user
+    lang = await _resolve_lang(update.effective_user.id, context)
     timing_label = (update.message.text or "").strip()[:100]
     if not timing_label:
         await update.message.reply_text(
-            "Please provide a timing label\\.", parse_mode=ParseMode.MARKDOWN_V2
+            _t("cgm_timing_label_required", lang), parse_mode=ParseMode.MARKDOWN_V2
         )
         return CGM_CUSTOM_TIMING
-    return await _save_cgm(update, context, timing_label)
+    return await _save_cgm(update, context, timing_label, lang=lang)
 
 
-async def _save_cgm(update: Update, context: ContextTypes.DEFAULT_TYPE, timing_label: str) -> int:
+async def _save_cgm(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    timing_label: str,
+    lang: str = "en",
+) -> int:
     """Save CGM entry and acknowledge."""
     assert update.effective_user
     user_id = update.effective_user.id
@@ -292,7 +340,7 @@ async def _save_cgm(update: Update, context: ContextTypes.DEFAULT_TYPE, timing_l
             await service.handle_photo(
                 user_id, file_bytes, file_id, entry_type="cgm", timing_label=timing_label
             )
-        msg = formatters.fmt_cgm_ack(timing_label)
+        msg = formatters.fmt_cgm_ack(timing_label, lang=lang)
         if update.callback_query:
             await update.callback_query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
         elif update.message:
@@ -303,7 +351,7 @@ async def _save_cgm(update: Update, context: ContextTypes.DEFAULT_TYPE, timing_l
         logger.exception("_save_cgm error: %s", exc)
         if update.message:
             await update.message.reply_text(
-                formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+                formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
             )
 
     return SESSION_OPEN
@@ -318,16 +366,18 @@ async def handle_activity_text(update: Update, context: ContextTypes.DEFAULT_TYP
     if text.startswith("/"):
         return SESSION_OPEN
 
+    lang = await _resolve_lang(update.effective_user.id, context)
+
     try:
         async with _session_service(context) as service:
             await service.handle_activity(update.effective_user.id, text)
         await update.message.reply_text(
-            formatters.fmt_activity_ack(text), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_activity_ack(text, lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
     except Exception as exc:
         logger.exception("handle_activity_text error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
     return SESSION_OPEN
 
@@ -337,6 +387,7 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     assert update.effective_user and update.message
     analysis_service = _get_analysis_service(context)
     user_id = update.effective_user.id
+    lang = await _resolve_lang(user_id, context)
 
     try:
         async with _session_service(context) as service:
@@ -345,25 +396,25 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             except InsufficientEntriesError:
                 counts = await service.get_entry_counts(user_id)
                 await update.message.reply_text(
-                    formatters.fmt_insufficient_entries(counts["food"], counts["cgm"]),
+                    formatters.fmt_insufficient_entries(counts["food"], counts["cgm"], lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
                 return SESSION_OPEN
             except ValueError:
                 await update.message.reply_text(
-                    formatters.fmt_no_session(), parse_mode=ParseMode.MARKDOWN_V2
+                    formatters.fmt_no_session(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
                 )
                 return SESSION_OPEN
     except Exception as exc:
         logger.exception("handle_done error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
         return SESSION_OPEN
 
     # Immediate acknowledgement < 2s (SC-002)
     await update.message.reply_text(
-        formatters.fmt_analysis_queued(), parse_mode=ParseMode.MARKDOWN_V2
+        formatters.fmt_analysis_queued(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
     )
 
     # Fire background analysis task
@@ -383,10 +434,11 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /status — show current session entry counts."""
     assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
     async with _session_service(context) as service:
         counts = await service.get_entry_counts(update.effective_user.id)
     await update.message.reply_text(
-        formatters.fmt_session_status(counts["food"], counts["cgm"], counts["activity"]),
+        formatters.fmt_session_status(counts["food"], counts["cgm"], counts["activity"], lang=lang),
         parse_mode=ParseMode.MARKDOWN_V2,
     )
     return SESSION_OPEN
@@ -395,12 +447,13 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /cancel — expire the open session."""
     assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
     async with _session_service(context) as service:
         session = await service._sess_repo.get_open_session(update.effective_user.id)
         if session:
             await service._sess_repo.expire_session(update.effective_user.id, session.id)
     await update.message.reply_text(
-        formatters.fmt_session_cancelled(),
+        formatters.fmt_session_cancelled(lang=lang),
         parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -412,6 +465,8 @@ async def handle_trend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     assert update.effective_user and update.message
     from glucotrack.repositories.session_repository import SessionRepository
 
+    lang = await _resolve_lang(update.effective_user.id, context)
+
     try:
         async with _session_service(context) as service:
             sess_repo = SessionRepository(service._db)
@@ -419,18 +474,18 @@ async def handle_trend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 user_id=update.effective_user.id, min_count=3
             )
         await update.message.reply_text(
-            formatters.fmt_trend_coming_soon(len(sessions)),
+            formatters.fmt_trend_coming_soon(len(sessions), lang=lang),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
     except InsufficientDataError as exc:
         await update.message.reply_text(
-            formatters.fmt_trend_insufficient(exc.current_count, exc.required_count),
+            formatters.fmt_trend_insufficient(exc.current_count, exc.required_count, lang=lang),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
     except Exception as exc:
         logger.exception("handle_trend error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
         )
     return SESSION_OPEN
 
@@ -445,31 +500,67 @@ async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE
     GitHub issue #3.
     """
     assert update.message and update.effective_user and update.message.text
+    lang = await _resolve_lang(update.effective_user.id, context)
     choice = update.message.text.strip().lower()
 
-    if "new" in choice:
+    # Match "new" for English ("Start new session") and "нов" for Russian ("Новая сессия")
+    if "new" in choice or "нов" in choice:
         async with _session_service(context) as service:
             await service.get_or_open_session(update.effective_user.id, force_new=True)
         await update.message.reply_text(
-            "✅ New session started\\. Send a food photo to begin\\.",
+            _t("new_session_started", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=ReplyKeyboardRemove(),
         )
     else:
         # Continue — re-prompt for photo type if there's a pending file
         await update.message.reply_text(
-            "✅ Continuing your existing session\\.",
+            _t("continuing_session", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=ReplyKeyboardRemove(),
         )
         if context.user_data.get("pending_file_id"):
             await update.message.reply_text(
-                formatters.fmt_photo_type_prompt(),
+                formatters.fmt_photo_type_prompt(lang=lang),
                 parse_mode=ParseMode.MARKDOWN_V2,
-                reply_markup=_photo_type_keyboard(),
+                reply_markup=_photo_type_keyboard(lang),
             )
             return PHOTO_TYPE_PROMPT
 
+    return SESSION_OPEN
+
+
+async def handle_language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /language <code> — persist and apply user language preference (FR-001, FR-002)."""
+    assert update.effective_user and update.message
+    user_id = update.effective_user.id
+    current_lang = await _resolve_lang(user_id, context)
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            formatters.fmt_language_usage(lang=current_lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        return SESSION_OPEN
+
+    requested = args[0].strip().lower()
+    if requested not in {m.value for m in SupportedLanguage}:
+        await update.message.reply_text(
+            formatters.fmt_language_error(requested, lang=current_lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        return SESSION_OPEN
+
+    async with _get_db_session() as db:
+        user_repo = UserRepository(db)
+        await user_repo.update_language(user_id, requested)
+
+    context.user_data["lang"] = requested
+    await update.message.reply_text(
+        formatters.fmt_language_changed(requested),
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
     return SESSION_OPEN
 
 
@@ -479,6 +570,7 @@ def build_conversation_handler() -> ConversationHandler:
         entry_points=[
             CommandHandler("start", handle_start),
             CommandHandler("new", handle_new_session),
+            CommandHandler("language", handle_language_command),
             MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_activity_text),
         ],
@@ -492,6 +584,7 @@ def build_conversation_handler() -> ConversationHandler:
                 CommandHandler("trend", handle_trend),
                 CommandHandler("help", handle_help),
                 CommandHandler("new", handle_new_session),
+                CommandHandler("language", handle_language_command),
             ],
             PHOTO_TYPE_PROMPT: [
                 CallbackQueryHandler(handle_photo_type_callback, pattern=r"^type:"),

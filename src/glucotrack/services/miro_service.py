@@ -18,6 +18,8 @@ from typing import Any
 
 import httpx
 
+from glucotrack.bot.i18n import t as _t
+
 logger = logging.getLogger(__name__)
 
 _MIRO_API_BASE = "https://api.miro.com/v2"
@@ -369,7 +371,7 @@ class MiroService:
                 )
         raise MiroError("Sticky note creation failed — no successful response")
 
-    def _build_section_text(self, analysis: Any, section: str) -> str:
+    def _build_section_text(self, analysis: Any, section: str, lang: str = "en") -> str:
         """Build formatted text content for a sticky note section.
 
         Sections: "food", "activity", "glucose", "correlation", "recommendations".
@@ -389,7 +391,7 @@ class MiroService:
                 gi_est = nutrition.get("gi_estimate", "?")
                 narrative = nutrition.get("glucose_impact_narrative", "")
                 lines = [
-                    "**Food**\n",
+                    _t("miro_food_header", lang) + "\n",
                     f"• Items: {items_str}",
                     f"• Carbs: {carbs}g | Protein: {proteins}g | Fat: {fats}g",
                     f"• GI: {gi_cat} (~{gi_est})",
@@ -402,15 +404,16 @@ class MiroService:
 
         if section == "activity":
             try:
+                activity_hdr = _t("miro_activity_header", lang)
                 if not analysis.activity_json:
-                    return "**Activity**\n\nNo activity logged"
+                    return f"{activity_hdr}\n\n{_t('miro_no_activity', lang)}"
                 activity = json.loads(analysis.activity_json)
                 description = activity.get("description")
                 modulation = activity.get("glucose_modulation", "")
                 effect = activity.get("effect_summary", "")
                 if not description:
-                    return "**Activity**\n\nNo activity logged"
-                lines = ["**Activity**\n", f"• {description}"]
+                    return f"{activity_hdr}\n\n{_t('miro_no_activity', lang)}"
+                lines = [activity_hdr + "\n", f"• {description}"]
                 if modulation:
                     lines.append(f"• {modulation}")
                 if effect:
@@ -422,7 +425,7 @@ class MiroService:
         if section == "glucose":
             try:
                 glucose_curve = json.loads(analysis.glucose_curve_json)
-                lines = ["**Glucose Chart**\n"]
+                lines = [_t("miro_glucose_header", lang) + "\n"]
                 for point in glucose_curve:
                     label = point.get("timing_label", "?")
                     value = point.get("estimated_value_mg_dl", "?")
@@ -445,8 +448,8 @@ class MiroService:
                     if not raw.get("cgm_parseable", True):
                         err = raw.get("cgm_parse_error", "unknown")
                         return (
-                            f"**Glucose Chart**\n\n⚠️ CGM unreadable: {err}. "
-                            "Please re-submit a clearer screenshot."
+                            f"{_t('miro_glucose_header', lang)}\n\n"
+                            f"{_t('miro_cgm_unreadable', lang, err=err)}"
                         )
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
@@ -457,7 +460,7 @@ class MiroService:
         if section == "correlation":
             try:
                 correlation = json.loads(analysis.correlation_json)
-                lines = ["**Correlation Insight**\n"]
+                lines = [_t("miro_correlation_header", lang) + "\n"]
                 spikes = correlation.get("spikes") or []
                 dips = correlation.get("dips") or []
                 stable = correlation.get("stable_zones") or []
@@ -477,13 +480,11 @@ class MiroService:
         if section == "recommendations":
             try:
                 recommendations = json.loads(analysis.recommendations_json)
+                rec_hdr = _t("miro_recommendations_header", lang)
                 if not recommendations:
-                    return (
-                        "**Recommendations**\n\n"
-                        "No specific recommendations generated for this session."
-                    )
+                    return f"{rec_hdr}\n\n{_t('miro_no_recommendations', lang)}"
                 sorted_recs = sorted(recommendations, key=lambda r: r.get("priority", 99))
-                lines = ["**Recommendations**\n"]
+                lines = [rec_hdr + "\n"]
                 for rec in sorted_recs:
                     lines.append(f"• {rec.get('text', '')}")
                 return "\n".join(lines)
@@ -496,6 +497,7 @@ class MiroService:
         self,
         analysis: Any,
         session_images: list[dict[str, Any]],
+        lang: str = "en",
     ) -> str:
         """Create an enhanced Miro Frame card with embedded photos and rich analysis sections.
 
@@ -578,7 +580,7 @@ class MiroService:
                 style = _STYLE_SEPARATOR
             else:
                 try:
-                    content = self._build_section_text(analysis, section_name)
+                    content = self._build_section_text(analysis, section_name, lang=lang)
                 except Exception:
                     content = (
                         "Analysis unavailable for this section" " — please re-submit your session."

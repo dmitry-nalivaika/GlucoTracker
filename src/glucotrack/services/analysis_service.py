@@ -24,6 +24,7 @@ from glucotrack.models.miro import MiroCard, MiroCardSourceType, MiroCardStatus
 from glucotrack.models.session import Session
 from glucotrack.repositories.analysis_repository import AnalysisRepository
 from glucotrack.repositories.session_repository import SessionRepository
+from glucotrack.repositories.user_repository import UserRepository, effective_lang
 from glucotrack.services.ai_service import AIService, AnalysisError
 from glucotrack.storage.local_storage import StorageRepository
 
@@ -60,6 +61,11 @@ class AnalysisService:
         This method delivers the final result.
         """
         try:
+            # Resolve user language preference early (FR-003, FR-004)
+            user_repo = UserRepository(self._db)
+            user = await user_repo.get_by_telegram_id(user_id)
+            lang = effective_lang(user)
+
             # Load session with all entries eagerly to avoid lazy load in async context
             result = await self._db.execute(
                 select(Session)
@@ -132,42 +138,43 @@ class AnalysisService:
                 )
 
             try:
-                result = await self._ai.analyse_session(
+                ai_result = await self._ai.analyse_session(
                     user_id=user_id,
                     food_entries=food_entries,
                     cgm_entries=cgm_entries,
                     activity_entries=activity_entries,
                     load_file_bytes=load_file_bytes,
+                    language=lang,
                 )
             except AnalysisError as exc:
                 logger.error("Analysis failed for session %s: %s", session_id, exc)
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=formatters.fmt_analysis_error(),
+                    text=formatters.fmt_analysis_error(lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
                 return
 
             # Handle CGM unparseable (FR-011)
-            if not result.get("cgm_parseable", True):
+            if not ai_result.get("cgm_parseable", True):
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=formatters.fmt_cgm_unparseable(),
+                    text=formatters.fmt_cgm_unparseable(lang=lang),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
                 return
 
             # Persist analysis
-            activity_data = result.get("activity")
+            activity_data = ai_result.get("activity")
             analysis = await self._analysis_repo.save_analysis(
                 user_id=user_id,
                 session_id=session_id,
-                nutrition=result.get("nutrition", {}),
-                glucose_curve=result.get("glucose_curve", []),
-                correlation=result.get("correlation", {}),
-                recommendations=result.get("recommendations", []),
-                within_target_notes=result.get("target_range_note"),
-                raw_response=json.dumps(result),
+                nutrition=ai_result.get("nutrition", {}),
+                glucose_curve=ai_result.get("glucose_curve", []),
+                correlation=ai_result.get("correlation", {}),
+                recommendations=ai_result.get("recommendations", []),
+                within_target_notes=ai_result.get("target_range_note"),
+                raw_response=json.dumps(ai_result),
                 activity_json=json.dumps(activity_data) if activity_data is not None else None,
             )
             await self._db.commit()
@@ -179,7 +186,7 @@ class AnalysisService:
             # Deliver result to Telegram (SC-003: within 30s of session completion)
             await bot.send_message(
                 chat_id=chat_id,
-                text=formatters.fmt_analysis_result(analysis),
+                text=formatters.fmt_analysis_result(analysis, lang=lang),
                 parse_mode=ParseMode.MARKDOWN_V2,
             )
 
@@ -201,7 +208,7 @@ class AnalysisService:
             # Fire-and-forget Miro card creation (FR-009: Miro failure must not block)
             if self._miro is not None and miro_card is not None:
                 asyncio.create_task(
-                    self._create_miro_card_safe(analysis, miro_card.id, session_images)
+                    self._create_miro_card_safe(analysis, miro_card.id, session_images, lang=lang)
                 )
 
         except Exception as exc:
@@ -220,6 +227,7 @@ class AnalysisService:
         analysis: Any,
         miro_card_id: str,
         session_images: list[dict[str, Any]] | None = None,
+        lang: str = "en",
     ) -> None:
         """Call Miro API; log outcome but never raise (FR-009).
 
@@ -232,7 +240,7 @@ class AnalysisService:
         try:
             if session_images is not None and hasattr(self._miro, "create_enhanced_session_card"):
                 card_id = await self._miro.create_enhanced_session_card(
-                    analysis=analysis, session_images=session_images
+                    analysis=analysis, session_images=session_images, lang=lang
                 )
             else:
                 card_id = await self._miro.create_session_card(analysis=analysis)

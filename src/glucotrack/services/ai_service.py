@@ -20,6 +20,14 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
+_LANGUAGE_INSTRUCTIONS: dict[str, str] = {
+    "ru": (
+        "Respond entirely in Russian. All narrative text, section explanations, "
+        "recommendations, and notes must be in Russian. "
+        "Numeric values, units (mg/dL), and JSON keys must remain unchanged."
+    ),
+}
+
 SESSION_ANALYSIS_SYSTEM_PROMPT = """You are a glucose analysis AI for GlucoTrack. \
 Analyse the provided food photos and CGM screenshots and return a JSON object with \
 exactly this structure (no markdown, pure JSON):
@@ -191,6 +199,7 @@ class AIService:
         cgm_entries: list[dict[str, Any]],
         activity_entries: list[dict[str, Any]],
         load_file_bytes: Callable,  # type: ignore[type-arg]
+        language: str = "en",
     ) -> dict[str, Any]:
         """Analyse a session using Claude vision API.
 
@@ -253,11 +262,16 @@ class AIService:
                 }
             )
 
+        system = SESSION_ANALYSIS_SYSTEM_PROMPT
+        lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, "")
+        if lang_instruction:
+            system = system + "\n\n" + lang_instruction
+
         try:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
-                system=SESSION_ANALYSIS_SYSTEM_PROMPT,
+                system=system,
                 messages=[{"role": "user", "content": content}],  # type: ignore[typeddict-item]
             )
             self._increment_call_count(user_id)
