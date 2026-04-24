@@ -9,7 +9,6 @@ concurrency:
   cancel-in-progress: false  # Never cancel a running deployment
 
 env:
-  # TODO(AZURE_SERVICES): Set these secrets in GitHub → Settings → Secrets
   AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
   AZURE_CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
   AZURE_REGISTRY: ${{ secrets.AZURE_REGISTRY }}
@@ -20,6 +19,7 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
     environment: production
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,59 +28,50 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          # TODO(AZURE_SERVICES): Create service principal:
-          # az ad sp create-for-rbac --name glucotrack-deploy \
-          #   --role contributor \
-          #   --scopes /subscriptions/{id}/resourceGroups/{rg} \
-          #   --sdk-auth
-          # Store the JSON output as AZURE_CREDENTIALS secret.
 
       # ── Build & push container image ────────────────────────────────────
       - name: Login to Azure Container Registry
         run: az acr login --name ${{ env.AZURE_REGISTRY }}
-        # TODO(AZURE_SERVICES): Create registry:
-        # az acr create --name glucotrack --resource-group {rg} --sku Basic
 
       - name: Build and push image
         run: |
-          docker build -t ${{ env.AZURE_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker push ${{ env.AZURE_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        # TODO: Add Dockerfile to project root (Developer Agent task)
+          az acr build \
+            --registry ${{ env.AZURE_REGISTRY }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.IMAGE_NAME }}:latest \
+            --file Dockerfile \
+            .
 
-      # ── Deploy to Azure Container Apps ──────────────────────────────────
-      - name: Deploy to staging
-        run: |
-          az containerapp update \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }}-staging \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        # TODO(AZURE_SERVICES): Create Container App:
-        # az containerapp create --name glucotrack-staging ...
-
-      # ── Smoke test staging ───────────────────────────────────────────────
-      - name: Smoke test staging
-        run: |
-          echo "TODO: Add smoke test script (tests/smoke/test_health.py)"
-          # pytest tests/smoke/ -v --base-url ${{ secrets.STAGING_URL }}
-
-      # ── Promote to production ────────────────────────────────────────────
+      # ── Deploy to production ─────────────────────────────────────────────
       - name: Deploy to production
         run: |
           az containerapp update \
             --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            --image ${{ env.AZURE_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --set-env-vars \
+              "TELEGRAM_BOT_TOKEN=secretref:telegram-bot-token" \
+              "ANTHROPIC_API_KEY=secretref:anthropic-api-key" \
+              "MIRO_ACCESS_TOKEN=secretref:miro-access-token" \
+              "MIRO_BOARD_ID=secretref:miro-board-id" \
+              "DATABASE_URL=sqlite+aiosqlite:////app/data/glucotrack.db" \
+              "STORAGE_ROOT=/app/data"
 
-      # ── Cost guard ───────────────────────────────────────────────────────
-      - name: Check Azure budget
+      - name: Verify deployment
         run: |
-          echo "TODO: Query Azure Cost Management API and fail if projected spend > $45"
-          # az consumption budget show --budget-name glucotrack-budget \
-          #   --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "Deployment failed — rolling back is manual until rollback script is added"
-          echo "TODO: Add automatic rollback to previous image tag"
-          exit 1
+          echo "Waiting for revision to be active..."
+          sleep 15
+          az containerapp show \
+            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "properties.latestRevisionName" \
+            --output tsv
+          az containerapp revision show \
+            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --revision $(az containerapp show \
+              --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --query "properties.latestRevisionName" -o tsv) \
+            --query "{state:properties.runningState,replicas:properties.replicas}" \
+            --output table
