@@ -295,6 +295,51 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "**Recommendations**",
         "ru": "**Рекомендации**",
     },
+    # Miro fallback / empty-state strings (plain text, no MarkdownV2 escaping needed)
+    "miro_no_activity": {
+        "en": "No activity logged",
+        "ru": "Активность не записана",
+    },
+    "miro_no_recommendations": {
+        "en": "No specific recommendations for this session.",
+        "ru": "Рекомендации для этой сессии не сгенерированы.",
+    },
+    "miro_cgm_unreadable": {
+        "en": "⚠️ CGM unreadable: {err}. Please re-submit a clearer screenshot.",
+        "ru": "⚠️ CGM нечитаем: {err}. Отправьте более чёткий скриншот.",
+    },
+    # Inline keyboard button labels
+    "kb_food_photo": {"en": "🍽️ Food photo", "ru": "🍽️ Фото еды"},
+    "kb_cgm_screenshot": {"en": "📈 CGM screenshot", "ru": "📈 Скриншот CGM"},
+    "kb_not_sure": {"en": "🤷 Not sure", "ru": "🤷 Не уверен"},
+    "kb_before_eating": {"en": "Before eating", "ru": "До еды"},
+    "kb_right_after": {"en": "Right after", "ru": "Сразу после"},
+    "kb_1h_after": {"en": "1 hour after", "ru": "Через 1 час"},
+    "kb_2h_after": {"en": "2 hours after", "ru": "Через 2 часа"},
+    "kb_other_label": {"en": "Other (type label)", "ru": "Другое (введите)"},
+    "kb_continue_session": {"en": "Continue session", "ru": "Продолжить сессию"},
+    "kb_new_session": {"en": "Start new session", "ru": "Новая сессия"},
+    # Hardcoded handler messages (MarkdownV2-escaped)
+    "new_session_started": {
+        "en": "✅ New session started\\. Send a food photo to begin\\.",
+        "ru": "✅ Новая сессия начата\\. Отправьте фото еды, чтобы начать\\.",
+    },
+    "image_saved_clarify": {
+        "en": "✅ Image saved\\. You can clarify its type when you use /done\\.",
+        "ru": "✅ Изображение сохранено\\. Уточните тип при использовании /done\\.",
+    },
+    "continuing_session": {
+        "en": "✅ Continuing your existing session\\.",
+        "ru": "✅ Продолжаем текущую сессию\\.",
+    },
+    "cgm_timing_label_prompt": {
+        "en": "Type your timing label \\(e\\.g\\. _3 hours after_, _fasting_\\):",
+        "ru": "Введите метку времени \\(напр\\. _через 3 часа_, _натощак_\\):",
+    },
+    "cgm_timing_label_required": {
+        "en": "Please provide a timing label\\.",
+        "ru": "Пожалуйста, укажите метку времени\\.",
+    },
 }
 
 

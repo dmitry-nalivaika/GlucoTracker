@@ -406,13 +406,13 @@ class MiroService:
             try:
                 activity_hdr = _t("miro_activity_header", lang)
                 if not analysis.activity_json:
-                    return f"{activity_hdr}\n\nNo activity logged"
+                    return f"{activity_hdr}\n\n{_t('miro_no_activity', lang)}"
                 activity = json.loads(analysis.activity_json)
                 description = activity.get("description")
                 modulation = activity.get("glucose_modulation", "")
                 effect = activity.get("effect_summary", "")
                 if not description:
-                    return f"{activity_hdr}\n\nNo activity logged"
+                    return f"{activity_hdr}\n\n{_t('miro_no_activity', lang)}"
                 lines = [activity_hdr + "\n", f"• {description}"]
                 if modulation:
                     lines.append(f"• {modulation}")
@@ -448,8 +448,8 @@ class MiroService:
                     if not raw.get("cgm_parseable", True):
                         err = raw.get("cgm_parse_error", "unknown")
                         return (
-                            f"{_t('miro_glucose_header', lang)}\n\n⚠️ CGM unreadable: {err}. "
-                            "Please re-submit a clearer screenshot."
+                            f"{_t('miro_glucose_header', lang)}\n\n"
+                            f"{_t('miro_cgm_unreadable', lang, err=err)}"
                         )
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
@@ -482,9 +482,7 @@ class MiroService:
                 recommendations = json.loads(analysis.recommendations_json)
                 rec_hdr = _t("miro_recommendations_header", lang)
                 if not recommendations:
-                    return (
-                        f"{rec_hdr}\n\n" "No specific recommendations generated for this session."
-                    )
+                    return f"{rec_hdr}\n\n{_t('miro_no_recommendations', lang)}"
                 sorted_recs = sorted(recommendations, key=lambda r: r.get("priority", 99))
                 lines = [rec_hdr + "\n"]
                 for rec in sorted_recs:

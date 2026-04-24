@@ -946,3 +946,43 @@ class TestMiroSectionTextRussian:
         analysis = _make_analysis()
         text = service._build_section_text(analysis, "food")
         assert "Food" in text
+
+    def test_activity_no_activity_body_is_russian(self) -> None:
+        """When no activity is logged, the fallback body must be in Russian for lang='ru'."""
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.activity_json = None
+        text = service._build_section_text(analysis, "activity", lang="ru")
+        assert (
+            "No activity logged" not in text
+        ), f"Hardcoded English fallback still present in Russian activity section:\n{text}"
+        assert (
+            "Активность не записана" in text
+        ), f"Expected Russian fallback 'Активность не записана' in:\n{text}"
+
+    def test_recommendations_empty_body_is_russian(self) -> None:
+        """When recommendations list is empty, the fallback body must be in Russian."""
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.recommendations_json = "[]"
+        text = service._build_section_text(analysis, "recommendations", lang="ru")
+        assert (
+            "No specific recommendations" not in text
+        ), f"Hardcoded English fallback still present in Russian recommendations:\n{text}"
+
+    def test_glucose_cgm_unreadable_body_is_russian(self) -> None:
+        """When CGM is unreadable, the error body must be in Russian for lang='ru'."""
+        import json as _json
+
+        service = _make_service()
+        analysis = _make_analysis()
+        analysis.raw_response = _json.dumps(
+            {"cgm_parseable": False, "cgm_parse_error": "blurry image"}
+        )
+        text = service._build_section_text(analysis, "glucose", lang="ru")
+        assert (
+            "Please re-submit a clearer screenshot" not in text
+        ), f"Hardcoded English fallback still present in Russian glucose section:\n{text}"
+        assert (
+            "скриншот" in text.lower() or "чёткий" in text.lower() or "нечитаем" in text.lower()
+        ), f"Expected Russian CGM-unreadable text in:\n{text}"

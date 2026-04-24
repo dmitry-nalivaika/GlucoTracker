@@ -136,9 +136,9 @@ class TestAnalysisServiceLanguageThreading:
 
         assert mock_ai.analyse_session.called
         call_kwargs = mock_ai.analyse_session.call_args[1]
-        assert call_kwargs.get("language") == "ru", (
-            f"Expected language='ru' but got: {call_kwargs.get('language')!r}"
-        )
+        assert (
+            call_kwargs.get("language") == "ru"
+        ), f"Expected language='ru' but got: {call_kwargs.get('language')!r}"
 
     @pytest.mark.asyncio
     async def test_english_user_calls_ai_with_language_en(self, test_db) -> None:
