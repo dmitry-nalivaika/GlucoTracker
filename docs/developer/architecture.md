@@ -40,6 +40,10 @@ Telegram User
 ### Input Channel: Telegram Bot (`bot/`)
 - `application.py` — PTB `Application` factory; wires `ConversationHandler`, `JobQueue`
 - `handlers.py` — one async handler per user action; delegates to services immediately; never contains business logic
+  - **Session action keyboard** (`_session_action_keyboard`): `ReplyKeyboardMarkup` with `/done`, `/cancel`, `/status`, `/settings` — shown whenever a session is open or an entry is acknowledged
+  - **Flat photo classification keyboard** (`_photo_type_keyboard`): single-tap `InlineKeyboardMarkup` showing Food + 4 CGM timing options + Not sure; `flat:*` callbacks route directly to `_save_cgm` (no second step)
+  - **Settings panel** (`handle_settings` / `handle_language_setting_callback`): `/settings` shows an inline language picker; `lang_set:*` callbacks are validated against `SupportedLanguage` before any DB write
+  - **Post-session keyboard** (`_post_session_keyboard`): `ReplyKeyboardMarkup` with `/new`, `/trend`, `/settings` — sent with every analysis result/error message so the user always has navigation buttons
 - `formatters.py` — all user-facing string templates (MarkdownV2); no string literals in handlers
 
 ### Domain (`domain/`)
@@ -73,8 +77,12 @@ SQLAlchemy 2.0 ORM mapped classes — 7 tables: `users`, `sessions`, `food_entri
    → SessionRepository.add_food_entry()
    → Bot replies "Food photo saved ✓" within 2s
 
-2. User sends CGM screenshot + selects timing
-   Telegram → handle_cgm_timing → SessionService.handle_photo(entry_type='cgm')
+2. User sends CGM screenshot → bot shows flat classification keyboard
+   Telegram → handle_photo → bot sends InlineKeyboardMarkup with 6 options:
+     🍽️ Food photo | 📈 CGM · before | 📈 CGM · right after |
+     📈 CGM · 1h after | 📈 CGM · 2h after | 🤷 Not sure
+   User taps one CGM option (flat:* callback) →
+   handle_photo_type_callback → SessionService.handle_photo(entry_type='cgm')
    → StorageRepository.save_file() + SessionRepository.add_cgm_entry()
 
 3. User sends /done

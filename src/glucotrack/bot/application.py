@@ -70,6 +70,7 @@ class _AnalysisServiceRunner:
         session_id: str,
         chat_id: int,
         bot: Any,
+        reply_markup: Any = None,
     ) -> None:
         from glucotrack.db import get_session
         from glucotrack.services.analysis_service import AnalysisService
@@ -86,6 +87,7 @@ class _AnalysisServiceRunner:
                 session_id=session_id,
                 chat_id=chat_id,
                 bot=bot,
+                reply_markup=reply_markup,
             )
 
 

@@ -356,6 +356,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "kb_1h_after": {"en": "1 hour after", "ru": "Через 1 час"},
     "kb_2h_after": {"en": "2 hours after", "ru": "Через 2 часа"},
     "kb_other_label": {"en": "Other (type label)", "ru": "Другое (введите)"},
+    # Flat CGM button labels (shown in combined food/CGM keyboard, feature 004)
+    "kb_cgm_flat_before": {"en": "📈 CGM · before", "ru": "📈 CGM · до еды"},
+    "kb_cgm_flat_after": {"en": "📈 CGM · right after", "ru": "📈 CGM · сразу после"},
+    "kb_cgm_flat_1h": {"en": "📈 CGM · 1h after", "ru": "📈 CGM · через 1ч"},
+    "kb_cgm_flat_2h": {"en": "📈 CGM · 2h after", "ru": "📈 CGM · через 2ч"},
     "kb_continue_session": {"en": "Continue session", "ru": "Продолжить сессию"},
     "kb_new_session": {"en": "Start new session", "ru": "Новая сессия"},
     # Hardcoded handler messages (MarkdownV2-escaped)
@@ -378,6 +383,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "cgm_timing_label_required": {
         "en": "Please provide a timing label\\.",
         "ru": "Пожалуйста, укажите метку времени\\.",
+    },
+    # Settings panel (feature 004)
+    "settings_prompt": {
+        "en": "⚙️ *Settings*\n\nChoose a language for bot messages:",
+        "ru": "⚙️ *Настройки*\n\nВыберите язык сообщений бота:",
+    },
+    "kb_lang_en": {"en": "🇺🇸 English", "ru": "🇺🇸 English"},
+    "kb_lang_ru": {"en": "🇷🇺 Русский", "ru": "🇷🇺 Русский"},
+    "language_set": {
+        "en": "✅ Language set to *English*\\.",
+        "ru": "✅ Язык изменён на *Русский*\\.",
     },
 }
 

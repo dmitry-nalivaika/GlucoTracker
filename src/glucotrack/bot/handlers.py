@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 
 # Inline keyboard data
 _FOOD = "type:food"
-_CGM = "type:cgm"
 _NOT_SURE = "type:unsure"
 _CGM_BEFORE = "timing:before eating"
 _CGM_AFTER_IMMEDIATE = "timing:right after eating"
@@ -61,14 +60,35 @@ _CGM_2H = "timing:2 hours after"
 _CGM_OTHER = "timing:other"
 _CONTINUE_SESSION = "session:continue"
 _NEW_SESSION = "session:new"
+# Settings — inline language selection
+_LANG_SET_EN = "lang_set:en"
+_LANG_SET_RU = "lang_set:ru"
+# Flat CGM timing buttons — shown directly in the photo classification keyboard
+_FLAT_CGM_BEFORE = "flat:before eating"
+_FLAT_CGM_AFTER_IMMEDIATE = "flat:right after eating"
+_FLAT_CGM_1H = "flat:1 hour after"
+_FLAT_CGM_2H = "flat:2 hours after"
 
 
 def _photo_type_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
+    """Single-step photo classification keyboard.
+
+    Shows all options at once: Food + 4 CGM timing variants (no nesting).
+    """
     return InlineKeyboardMarkup(
         [
+            [InlineKeyboardButton(_t("kb_food_photo", lang), callback_data=_FOOD)],
             [
-                InlineKeyboardButton(_t("kb_food_photo", lang), callback_data=_FOOD),
-                InlineKeyboardButton(_t("kb_cgm_screenshot", lang), callback_data=_CGM),
+                InlineKeyboardButton(
+                    _t("kb_cgm_flat_before", lang), callback_data=_FLAT_CGM_BEFORE
+                ),
+                InlineKeyboardButton(
+                    _t("kb_cgm_flat_after", lang), callback_data=_FLAT_CGM_AFTER_IMMEDIATE
+                ),
+            ],
+            [
+                InlineKeyboardButton(_t("kb_cgm_flat_1h", lang), callback_data=_FLAT_CGM_1H),
+                InlineKeyboardButton(_t("kb_cgm_flat_2h", lang), callback_data=_FLAT_CGM_2H),
             ],
             [InlineKeyboardButton(_t("kb_not_sure", lang), callback_data=_NOT_SURE)],
         ]
@@ -96,7 +116,27 @@ def _cgm_timing_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
 def _session_action_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
     """Persistent reply keyboard shown when a session is open (feature 004)."""
     return ReplyKeyboardMarkup(
-        [["/done", "/cancel", "/status"]],
+        [["/done", "/cancel", "/status"], ["/settings"]],
+        resize_keyboard=True,
+    )
+
+
+def _settings_language_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
+    """Inline keyboard for the /settings panel — language selection."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(_t("kb_lang_en", lang), callback_data=_LANG_SET_EN),
+                InlineKeyboardButton(_t("kb_lang_ru", lang), callback_data=_LANG_SET_RU),
+            ]
+        ]
+    )
+
+
+def _post_session_keyboard(lang: str = "en") -> ReplyKeyboardMarkup:
+    """Reply keyboard sent with the final analysis result — lets the user start over."""
+    return ReplyKeyboardMarkup(
+        [["/new", "/trend"], ["/settings"]],
         resize_keyboard=True,
     )
 
@@ -282,22 +322,16 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
         file = await context.bot.get_file(file_id)
         file_bytes = await file.download_as_bytearray()
 
-        if query.data == _CGM:
+        if query.data.startswith("flat:"):
+            # Flat CGM timing button — save directly without a second keyboard step
+            timing_label = query.data[len("flat:") :]
             context.user_data["pending_file_bytes"] = bytes(file_bytes)
-            await query.edit_message_text(
-                formatters.fmt_cgm_timing_prompt(lang=lang),
-                parse_mode=ParseMode.MARKDOWN_V2,
-                reply_markup=_cgm_timing_keyboard(lang),
-            )
-            return CGM_TIMING_PROMPT
+            return await _save_cgm(update, context, timing_label, lang=lang)
 
         async with _session_service(context) as service:
             if query.data == _FOOD:
                 await service.handle_photo(user_id, bytes(file_bytes), file_id, entry_type="food")
-                await query.edit_message_text(
-                    formatters.fmt_food_ack(lang=lang, guided=True),
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                )
+                ack_text = formatters.fmt_food_ack(lang=lang, guided=True)
             else:  # _NOT_SURE
                 await service.handle_photo(
                     user_id,
@@ -306,10 +340,15 @@ async def handle_photo_type_callback(update: Update, context: ContextTypes.DEFAU
                     entry_type="food",
                     description="[unclassified — user unsure]",
                 )
-                await query.edit_message_text(
-                    _t("image_saved_clarify", lang),
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                )
+                ack_text = _t("image_saved_clarify", lang)
+        # Clear inline keyboard then send ack as new message with session keyboard restored
+        await query.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=ack_text,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
+        )
 
     except Exception as exc:
         logger.exception("handle_photo_type_callback error: %s", exc)
@@ -371,7 +410,15 @@ async def _save_cgm(
             )
         msg = formatters.fmt_cgm_ack(timing_label, lang=lang, guided=True)
         if update.callback_query:
-            await update.callback_query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
+            # Clear the inline timing keyboard, then send ack as a new message
+            # with the session keyboard restored (inline interactions can collapse it)
+            await update.callback_query.edit_message_reply_markup(reply_markup=None)
+            await context.bot.send_message(
+                chat_id=update.callback_query.message.chat_id,
+                text=msg,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=_session_action_keyboard(lang),
+            )
         elif update.message:
             await update.message.reply_text(
                 msg,
@@ -410,7 +457,9 @@ async def handle_activity_text(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as exc:
         logger.exception("handle_activity_text error: %s", exc)
         await update.message.reply_text(
-            formatters.fmt_generic_error(lang=lang), parse_mode=ParseMode.MARKDOWN_V2
+            formatters.fmt_generic_error(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
         )
     return SESSION_OPEN
 
@@ -460,6 +509,7 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
                 session_id=session.id,
                 chat_id=update.effective_chat.id if update.effective_chat else user_id,
                 bot=context.bot,
+                reply_markup=_post_session_keyboard(lang),
             )
         )
 
@@ -545,14 +595,18 @@ async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(
             _t("new_session_started", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=ReplyKeyboardRemove(),
+        )
+        await update.message.reply_text(
+            formatters.fmt_session_start_prompt(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
         )
     else:
         # Continue — re-prompt for photo type if there's a pending file
         await update.message.reply_text(
             _t("continuing_session", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=_session_action_keyboard(lang),
         )
         if context.user_data.get("pending_file_id"):
             await update.message.reply_text(
@@ -599,6 +653,43 @@ async def handle_language_command(update: Update, context: ContextTypes.DEFAULT_
     return SESSION_OPEN
 
 
+async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /settings — show inline language picker."""
+    assert update.effective_user and update.message
+    lang = await _resolve_lang(update.effective_user.id, context)
+    await update.message.reply_text(
+        formatters.fmt_settings_prompt(lang=lang),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=_settings_language_keyboard(lang),
+    )
+    return SESSION_OPEN
+
+
+async def handle_language_setting_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle inline language selection from /settings panel (lang_set: callbacks)."""
+    assert update.callback_query and update.effective_user
+    query = update.callback_query
+    await query.answer()
+
+    chosen_lang = query.data.replace("lang_set:", "")
+    # Validate against the whitelist — callback data is user-controlled (Constitution V)
+    if chosen_lang not in {m.value for m in SupportedLanguage}:
+        return SESSION_OPEN
+
+    async with _get_db_session() as db:
+        user_repo = UserRepository(db)
+        await user_repo.update_language(update.effective_user.id, chosen_lang)
+
+    context.user_data["lang"] = chosen_lang
+    await query.edit_message_text(
+        formatters.fmt_language_set(lang=chosen_lang),
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
+    return SESSION_OPEN
+
+
 def build_conversation_handler() -> ConversationHandler:
     """Build and return the main ConversationHandler."""
     return ConversationHandler(
@@ -606,6 +697,7 @@ def build_conversation_handler() -> ConversationHandler:
             CommandHandler("start", handle_start),
             CommandHandler("new", handle_new_session),
             CommandHandler("language", handle_language_command),
+            CommandHandler("settings", handle_settings),
             MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_activity_text),
         ],
@@ -620,9 +712,11 @@ def build_conversation_handler() -> ConversationHandler:
                 CommandHandler("help", handle_help),
                 CommandHandler("new", handle_new_session),
                 CommandHandler("language", handle_language_command),
+                CommandHandler("settings", handle_settings),
+                CallbackQueryHandler(handle_language_setting_callback, pattern=r"^lang_set:"),
             ],
             PHOTO_TYPE_PROMPT: [
-                CallbackQueryHandler(handle_photo_type_callback, pattern=r"^type:"),
+                CallbackQueryHandler(handle_photo_type_callback, pattern=r"^(type:|flat:)"),
             ],
             CGM_TIMING_PROMPT: [
                 CallbackQueryHandler(handle_cgm_timing_callback, pattern=r"^timing:"),

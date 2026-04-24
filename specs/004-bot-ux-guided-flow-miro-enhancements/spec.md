@@ -38,8 +38,8 @@ without memorising commands.
 - AC1.4: After **activity text** is saved, the ack includes a next-step hint:
   "Add more photos if needed, or tap /done for your analysis."
 - AC1.5: All guided prompt strings are bilingual (en/ru) via i18n catalogue.
-- AC1.6: The session action keyboard is shown with `/done`, `/cancel`, `/status`
-  buttons whenever `new_session_started` is acked.
+- AC1.6: The session action keyboard is shown with `/done`, `/cancel`, `/status`,
+  `/settings` buttons whenever a session is opened or an entry is acknowledged.
 - AC1.7: The session action keyboard is dismissed (`ReplyKeyboardRemove`) when a
   session ends (via /cancel or after analysis is queued).
 
@@ -94,6 +94,45 @@ summary, and photos in a clean single row so I can evaluate a session at a glanc
 
 ---
 
+### US4 — Flat Photo Classification Keyboard (P1 amendment — user-requested)
+
+**As a user** I want to classify a photo in a single tap (Food or a specific CGM
+timing) without a nested two-step inline keyboard, so the interaction feels faster.
+
+**Acceptance Criteria**:
+
+- AC4.1: When the bot asks "Is this food or CGM?", the inline keyboard shows all
+  options at once: `🍽️ Food photo`, `📈 CGM · before`, `📈 CGM · right after`,
+  `📈 CGM · 1h after`, `📈 CGM · 2h after`, `🤷 Not sure`.
+- AC4.2: Tapping any CGM option saves the screenshot with the corresponding timing
+  label directly, without a second timing-selection step.
+- AC4.3: The `CGM_TIMING_PROMPT` state and its `timing:` callbacks remain in code
+  for forward-compatibility but are no longer triggered by the default keyboard.
+- AC4.4: All flat CGM callback values are prefixed `flat:` to avoid collision with
+  the legacy `timing:` prefix.
+- AC4.5: After any flat CGM selection the session action keyboard is restored.
+
+---
+
+### US5 — Settings Panel (P2 amendment — user-requested)
+
+**As a user** I want a `/settings` button always visible in my session keyboard so
+I can change the bot language with a single tap, without typing `/language en`.
+
+**Acceptance Criteria**:
+
+- AC5.1: The session action keyboard includes a `/settings` button (second row).
+- AC5.2: `/settings` shows an inline keyboard with language options:
+  `🇺🇸 English` (`lang_set:en`) and `🇷🇺 Русский` (`lang_set:ru`).
+- AC5.3: Tapping a language button persists the choice to the DB and updates
+  `user_data["lang"]`, then edits the message to show a confirmation.
+- AC5.4: The `lang_set:X` callback data is validated against `SupportedLanguage`
+  before any DB write (Constitution V — all user-supplied input must be validated).
+- AC5.5: After analysis result delivery, a post-session keyboard (`/new`, `/trend`,
+  `/settings`) is shown so the user can start a new session immediately.
+
+---
+
 ## Non-Functional Requirements
 
 - NFR-1: Bot startup broadcast MUST NOT increase startup latency perceptibly (fire-and-forget).
@@ -107,9 +146,9 @@ summary, and photos in a clean single row so I can evaluate a session at a glanc
 
 ## Out of Scope
 
-- Restructuring the 3-step photo → classify → timing conversation flow (deferred).
 - Offline broadcast (AC2.6): graceful no-op if PTB does not provide a clean hook.
 - Trend analysis improvements (separate feature).
+- Multi-step photo classification timing keyboard (superseded by US4 flat keyboard).
 
 ---
 
