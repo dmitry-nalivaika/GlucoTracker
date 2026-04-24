@@ -31,7 +31,9 @@ from telegram.ext import (
 
 from glucotrack.bot import formatters
 from glucotrack.domain.session import InsufficientEntriesError
+from glucotrack.models.user import SupportedLanguage
 from glucotrack.repositories.analysis_repository import InsufficientDataError
+from glucotrack.repositories.user_repository import UserRepository, effective_lang
 
 if TYPE_CHECKING:
     from glucotrack.services.session_service import SessionService
@@ -92,6 +94,27 @@ def _disambiguate_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [["Continue session", "Start new session"]], one_time_keyboard=True, resize_keyboard=True
     )
+
+
+@asynccontextmanager
+async def _get_db_session():  # type: ignore[return]
+    """Yield a bare AsyncSession (for handlers that need direct DB access)."""
+    from glucotrack.db import get_session
+
+    async with get_session() as db:
+        yield db
+
+
+async def _get_user_lang(user_id: int, db: object) -> str:
+    """Fetch and cache the user's language preference.
+
+    Reads from DB on first call; caches result. Always returns a valid lang code.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    user_repo = UserRepository(db)  # type: ignore[arg-type]
+    user = await user_repo.get_by_telegram_id(user_id)
+    return effective_lang(user)
 
 
 @asynccontextmanager
@@ -473,12 +496,47 @@ async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE
     return SESSION_OPEN
 
 
+async def handle_language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /language <code> — persist and apply user language preference (FR-001, FR-002)."""
+    assert update.effective_user and update.message
+    user_id = update.effective_user.id
+    current_lang = context.user_data.get("lang", "en")
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            formatters.fmt_language_usage(lang=current_lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        return SESSION_OPEN
+
+    requested = args[0].strip().lower()
+    if requested not in {m.value for m in SupportedLanguage}:
+        await update.message.reply_text(
+            formatters.fmt_language_error(requested, lang=current_lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        return SESSION_OPEN
+
+    async with _get_db_session() as db:
+        user_repo = UserRepository(db)
+        await user_repo.update_language(user_id, requested)
+
+    context.user_data["lang"] = requested
+    await update.message.reply_text(
+        formatters.fmt_language_changed(requested),
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
+    return SESSION_OPEN
+
+
 def build_conversation_handler() -> ConversationHandler:
     """Build and return the main ConversationHandler."""
     return ConversationHandler(
         entry_points=[
             CommandHandler("start", handle_start),
             CommandHandler("new", handle_new_session),
+            CommandHandler("language", handle_language_command),
             MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_activity_text),
         ],
@@ -492,6 +550,7 @@ def build_conversation_handler() -> ConversationHandler:
                 CommandHandler("trend", handle_trend),
                 CommandHandler("help", handle_help),
                 CommandHandler("new", handle_new_session),
+                CommandHandler("language", handle_language_command),
             ],
             PHOTO_TYPE_PROMPT: [
                 CallbackQueryHandler(handle_photo_type_callback, pattern=r"^type:"),

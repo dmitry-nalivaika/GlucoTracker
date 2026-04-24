@@ -2,6 +2,9 @@
 
 All user-facing strings are defined here — no string literals in handlers.
 Raw stack traces MUST NOT appear (Constitution V).
+
+Every public fmt_* function accepts an optional `lang: str = "en"` keyword
+argument. Pass the user's stored language code to localise the message.
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 
+from glucotrack.bot import i18n
 from glucotrack.models.analysis import AIAnalysis
 
 
@@ -18,78 +22,62 @@ def _escape(text: str) -> str:
     return re.sub(r"([" + re.escape(special) + r"])", r"\\\1", str(text))
 
 
-def fmt_welcome(username: str | None = None) -> str:
-    name = username or "there"
-    return (
-        f"👋 Welcome to *GlucoTrack*, {_escape(name)}\\!\n\n"
-        "I help you log meal sessions and analyse your glucose response\\.\n\n"
-        "*What to do:*\n"
-        "1\\. Send a food photo\n"
-        "2\\. Send your CGM screenshot\\(s\\)\n"
-        "3\\. Optionally describe your activity\n"
-        "4\\. Type /done to get your AI analysis\n\n"
-        "Type /help for full instructions\\."
-    )
+def fmt_welcome(username: str | None = None, *, lang: str = "en") -> str:
+    name = _escape(username or "there")
+    return i18n.t("welcome", lang, name=name)
 
 
-def fmt_photo_type_prompt() -> str:
-    return "📷 Got your image\\! Is this a *food photo* or a *CGM screenshot*?"
+def fmt_photo_type_prompt(*, lang: str = "en") -> str:
+    return i18n.t("photo_type_prompt", lang)
 
 
-def fmt_cgm_timing_prompt() -> str:
-    return "⏱️ When was this CGM screenshot taken?\n\n" "Choose a timing or type your own label:"
+def fmt_cgm_timing_prompt(*, lang: str = "en") -> str:
+    return i18n.t("cgm_timing_prompt", lang)
 
 
-def fmt_food_ack(description: str | None = None) -> str:
+def fmt_food_ack(description: str | None = None, *, lang: str = "en") -> str:
     note = f" \\({_escape(description)}\\)" if description else ""
-    return f"✅ Food photo{note} saved to your session\\."
+    return i18n.t("food_ack", lang, note=note)
 
 
-def fmt_cgm_ack(timing_label: str) -> str:
-    return f"✅ CGM screenshot \\({_escape(timing_label)}\\) saved to your session\\."
+def fmt_cgm_ack(timing_label: str, *, lang: str = "en") -> str:
+    return i18n.t("cgm_ack", lang, timing=_escape(timing_label))
 
 
-def fmt_activity_ack(text: str) -> str:
-    return f"✅ Activity logged: _{_escape(text)}_"
+def fmt_activity_ack(text: str, *, lang: str = "en") -> str:
+    return i18n.t("activity_ack", lang, text=_escape(text))
 
 
-def fmt_session_status(food: int, cgm: int, activity: int) -> str:
-    return (
-        f"📋 *Current session:*\n"
-        f"• Food photos: {food}\n"
-        f"• CGM screenshots: {cgm}\n"
-        f"• Activity entries: {activity}\n\n"
-        f"Type /done when you\\'re ready to get your analysis\\."
-    )
+def fmt_session_status(food: int, cgm: int, activity: int, *, lang: str = "en") -> str:
+    return i18n.t("session_status", lang, food=food, cgm=cgm, activity=activity)
 
 
-def fmt_analysis_queued() -> str:
-    return "⏳ Session complete\\! *Analysis in progress\\.\\.\\.* \\(up to 30 seconds\\)"
+def fmt_analysis_queued(*, lang: str = "en") -> str:
+    return i18n.t("analysis_queued", lang)
 
 
-def fmt_session_cancelled() -> str:
-    return "🗑️ Session cancelled\\. Your data has been discarded\\. Use /new to start fresh\\."
+def fmt_session_cancelled(*, lang: str = "en") -> str:
+    return i18n.t("session_cancelled", lang)
 
 
-def fmt_disambiguation_prompt(last_input_ago_minutes: float) -> str:
+def fmt_disambiguation_prompt(last_input_ago_minutes: float, *, lang: str = "en") -> str:
     mins = int(last_input_ago_minutes)
-    return (
-        f"You have an open session from *{mins} minutes ago*\\.\n\n"
-        "Would you like to *continue* that session or *start a new one*?"
-    )
+    return i18n.t("disambiguation_prompt", lang, mins=mins)
 
 
-def fmt_insufficient_entries(food: int, cgm: int) -> str:
-    msg = "⚠️ Please add "
+def fmt_insufficient_entries(food: int, cgm: int, *, lang: str = "en") -> str:
+    prefix = i18n.t("insufficient_entries_prefix", lang)
+    suffix = i18n.t("insufficient_suffix", lang)
     parts = []
     if food < 1:
-        parts.append("at least one *food photo*")
+        parts.append(i18n.t("insufficient_food", lang))
     if cgm < 1:
-        parts.append("at least one *CGM screenshot*")
-    return msg + " and ".join(_escape(p) for p in parts) + " before completing\\."
+        parts.append(i18n.t("insufficient_cgm", lang))
+    connector = " and " if lang == "en" else " и "
+    return prefix + connector.join(_escape(p) for p in parts) + suffix
 
 
-def fmt_analysis_result(analysis: AIAnalysis) -> str:
+def fmt_analysis_result(analysis: AIAnalysis, *, lang: str = "en") -> str:
     """Format a structured analysis message for Telegram MarkdownV2."""
     nutrition = json.loads(analysis.nutrition_json)
     glucose_curve = json.loads(analysis.glucose_curve_json)
@@ -119,27 +107,27 @@ def fmt_analysis_result(analysis: AIAnalysis) -> str:
         rec_lines.append(f"{i}\\. {_escape(rec.get('text', ''))}")
 
     lines = [
-        "🍽️ *GlucoTrack Analysis*",
+        i18n.t("analysis_header", lang),
         "",
-        "*Nutrition Estimate*",
+        i18n.t("nutrition_header", lang),
         f"Carbs: {carbs}g \\| Protein: {proteins}g \\| Fat: {fats}g",
         f"Glycaemic Index estimate: \\~{gi}",
     ]
     if nutrition_notes:
         lines.append(f"_{_escape(nutrition_notes)}_")
 
-    # Activity section (FR-010) — shown when activity_json is present
+    # Activity section — shown when activity_json is present
     if analysis.activity_json:
         try:
             activity = json.loads(analysis.activity_json)
             description = activity.get("description")
             modulation = activity.get("glucose_modulation", "")
             effect = activity.get("effect_summary", "")
-            lines += ["", "*Activity*"]
+            lines += ["", i18n.t("activity_header", lang)]
             if description:
                 lines.append(_escape(description))
             else:
-                lines.append("No activity logged")
+                lines.append(i18n.t("no_activity", lang))
             if modulation and modulation != "No activity logged.":
                 lines.append(_escape(modulation))
             if effect and effect != "No activity to analyse.":
@@ -147,13 +135,13 @@ def fmt_analysis_result(analysis: AIAnalysis) -> str:
         except (json.JSONDecodeError, TypeError):
             pass
 
-    lines += ["", "*Glucose Curve*"]
-    lines.extend(curve_lines or ["  _No data available_"])
+    lines += ["", i18n.t("glucose_curve_header", lang)]
+    lines.extend(curve_lines or [i18n.t("no_glucose_data", lang)])
 
-    lines += ["", "*Food–Glucose Correlation*", _escape(correlation.get("summary", "N/A"))]
+    lines += ["", i18n.t("correlation_header", lang), _escape(correlation.get("summary", "N/A"))]
 
-    lines += ["", "*Recommendations*"]
-    lines.extend(rec_lines or ["  _No recommendations_"])
+    lines += ["", i18n.t("recommendations_header", lang)]
+    lines.extend(rec_lines or [i18n.t("no_recommendations", lang)])
 
     if target_note:
         lines += ["", f"_{_escape(target_note)}_"]
@@ -161,52 +149,45 @@ def fmt_analysis_result(analysis: AIAnalysis) -> str:
     return "\n".join(lines)
 
 
-def fmt_cgm_unparseable() -> str:
-    return (
-        "⚠️ I couldn't read your CGM screenshot clearly\\.\n\n"
-        "Your session data is saved\\. Please send a clearer screenshot and use /done to retry\\."
-    )
+def fmt_cgm_unparseable(*, lang: str = "en") -> str:
+    return i18n.t("cgm_unparseable", lang)
 
 
-def fmt_analysis_error() -> str:
-    return (
-        "😔 Analysis failed\\. Your session data is preserved\\.\n\n"
-        "Use /done to retry, or /cancel to discard the session\\."
-    )
+def fmt_analysis_error(*, lang: str = "en") -> str:
+    return i18n.t("analysis_error", lang)
 
 
-def fmt_no_session() -> str:
-    return "ℹ️ You don't have an open session\\. Send a food photo or use /new to start one\\."
+def fmt_no_session(*, lang: str = "en") -> str:
+    return i18n.t("no_session", lang)
 
 
-def fmt_trend_insufficient(current: int, required: int) -> str:
+def fmt_trend_insufficient(current: int, required: int, *, lang: str = "en") -> str:
     needed = required - current
-    return (
-        f"📊 You need at least *{required} analysed sessions* for trend analysis\\.\n"
-        f"You have *{current}* — log *{needed} more* session\\(s\\) first\\."
-    )
+    return i18n.t("trend_insufficient", lang, current=current, required=required, needed=needed)
 
 
-def fmt_trend_coming_soon(session_count: int) -> str:
-    return (
-        f"📊 Trend analysis is coming soon\\!\n"
-        f"You have *{session_count} analysed session\\(s\\)* ready\\."
-    )
+def fmt_trend_coming_soon(session_count: int, *, lang: str = "en") -> str:
+    return i18n.t("trend_coming_soon", lang, session_count=session_count)
 
 
-def fmt_generic_error() -> str:
-    return "Something went wrong\\. Please try again or use /cancel to reset your session\\."
+def fmt_generic_error(*, lang: str = "en") -> str:
+    return i18n.t("generic_error", lang)
 
 
-def fmt_help() -> str:
-    return (
-        "*GlucoTrack Help*\n\n"
-        "*/start* — welcome message\n"
-        "*/new* — start a new session\n"
-        "*/done* — complete session and get AI analysis\n"
-        "*/status* — show current session progress\n"
-        "*/trend* — request trend analysis\n"
-        "*/cancel* — discard current session\n"
-        "*/help* — show this message\n\n"
-        "📸 Send a food photo or CGM screenshot to begin logging\\."
-    )
+def fmt_help(*, lang: str = "en") -> str:
+    return i18n.t("help", lang)
+
+
+def fmt_language_changed(lang: str = "en") -> str:
+    """Confirmation message after a successful /language command."""
+    return i18n.t("language_changed", lang)
+
+
+def fmt_language_error(unsupported_code: str, *, lang: str = "en") -> str:
+    """Error response for an unsupported language code."""
+    return i18n.t("language_error", lang, code=_escape(unsupported_code))
+
+
+def fmt_language_usage(*, lang: str = "en") -> str:
+    """Usage hint when /language is called with no argument."""
+    return i18n.t("language_usage", lang)
