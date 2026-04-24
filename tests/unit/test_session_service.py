@@ -138,3 +138,44 @@ class TestSessionServiceCompletion:
 
         with pytest.raises(InsufficientEntriesError):
             await service.complete_session(telegram_user_id=701)
+
+
+class TestSessionServiceFilenames:
+    """Filename uniqueness for uploaded photos."""
+
+    @pytest.mark.asyncio
+    async def test_two_cgm_photos_with_shared_prefix_get_distinct_filenames(
+        self, test_db
+    ) -> None:
+        """Two CGM uploads with file IDs sharing the same 8-char prefix must produce
+        distinct filenames — otherwise the second file silently overwrites the first,
+        causing all CGM images on the Miro card to look identical.
+        """
+        storage = MagicMock(spec=StorageRepository)
+        # Return distinct paths to simulate what save_file would do with distinct names
+        storage.save_file.side_effect = lambda user_id, session_id, filename, data: (
+            f"users/{user_id}/sessions/{session_id}/{filename}"
+        )
+
+        service = SessionService(db=test_db, storage=storage)
+        await service.get_or_open_session(telegram_user_id=800)
+        await test_db.commit()
+
+        # Simulate two CGM photos whose file IDs share the same 8-char prefix
+        # (this mirrors real Telegram photo file IDs which start with "AgACAgI")
+        file_id_1 = "AgACAgIAAAAAAAAAAAAAAAAAA1111"
+        file_id_2 = "AgACAgIAAAAAAAAAAAAAAAAAA2222"
+        assert file_id_1[:8] == file_id_2[:8], "Test setup: IDs must share 8-char prefix"
+
+        await service.handle_photo(800, b"bytes1", file_id_1, entry_type="cgm", timing_label="1h")
+        await service.handle_photo(800, b"bytes2", file_id_2, entry_type="cgm", timing_label="2h")
+        await test_db.commit()
+
+        call_args = storage.save_file.call_args_list
+        assert len(call_args) == 2
+        filename_1 = call_args[0].args[2]  # positional arg: filename
+        filename_2 = call_args[1].args[2]
+        assert filename_1 != filename_2, (
+            f"Both CGM uploads produced the same filename '{filename_1}'; "
+            "the second file would silently overwrite the first."
+        )

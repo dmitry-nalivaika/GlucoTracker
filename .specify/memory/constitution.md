@@ -1,6 +1,17 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.0.0 → 1.0.1  — PATCH: enforce no-direct-commits-to-main
+Added sections: none
+Modified principles:
+  - Git Workflow Rules: added NON-NEGOTIABLE callout block explicitly prohibiting
+    direct commits to `main` under all circumstances (including bugfixes/hotfixes);
+    expanded PR lifecycle step 1 to require a feature branch always.
+  - Previous version (1.0.0) already contained the rule but it was insufficiently
+    prominent; this amendment makes it unambiguous and impossible to miss.
+
+---
+
 Version change: (blank template) → 1.0.0  — INITIAL RATIFICATION
 Added sections:
   - I.  Vision
@@ -240,6 +251,11 @@ surface a blocker rather than proceeding unilaterally.
 
 ## Git Workflow Rules
 
+> **NON-NEGOTIABLE: NO DIRECT COMMITS TO `main`**
+> Every change — including bug fixes, typos, and hotfixes — MUST go through a
+> feature branch and a Pull Request. There are zero exceptions. An agent that
+> commits directly to `main` has violated the constitution.
+
 - **Branch naming**: `{issue-number}-{kebab-case-description}`
   (e.g., `12-telegram-session-grouping`).
 - **Base branch**: All feature branches MUST branch from `main`.
@@ -247,13 +263,16 @@ surface a blocker rather than proceeding unilaterally.
   `type(scope): description` — types: `feat`, `fix`, `docs`, `test`, `chore`, `refactor`.
 - **Commit size**: Each commit MUST represent one logical change.
   Mixing unrelated changes in a single commit is FORBIDDEN.
+- **Direct commits to `main`**: FORBIDDEN under all circumstances, including
+  bugfixes, hotfixes, typo corrections, and post-PR-merge follow-ups.
 - **Force push**: Force-pushing to `main` is FORBIDDEN under all circumstances.
 - **Merge strategy**: Squash-merge to `main` for feature branches to keep history readable.
 - **PR lifecycle**:
-  1. Open PR as draft during development.
-  2. Mark ready-for-review only when all local tests pass.
-  3. All quality gates must pass before merge.
-  4. Delete the feature branch after merge.
+  1. Create a feature branch from `main` — always, no exceptions.
+  2. Open PR as draft during development.
+  3. Mark ready-for-review only when all local tests pass.
+  4. All quality gates must pass before merge.
+  5. Delete the feature branch after merge.
 - **No WIP commits on `main`**: `main` MUST always be in a deployable state.
 
 ---
@@ -361,4 +380,4 @@ this document wins.
 - Non-negotiable principles (II, IV, V, VII) MUST NOT be waived under any circumstances,
   including time pressure or cost pressure.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-17 | **Last Amended**: 2026-04-17
+**Version**: 1.0.1 | **Ratified**: 2026-04-17 | **Last Amended**: 2026-04-24
