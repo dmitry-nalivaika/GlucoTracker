@@ -371,7 +371,15 @@ async def _save_cgm(
             )
         msg = formatters.fmt_cgm_ack(timing_label, lang=lang, guided=True)
         if update.callback_query:
-            await update.callback_query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
+            # Clear the inline timing keyboard, then send ack as a new message
+            # with the session keyboard restored (inline interactions can collapse it)
+            await update.callback_query.edit_message_reply_markup(reply_markup=None)
+            await context.bot.send_message(
+                chat_id=update.callback_query.message.chat_id,
+                text=msg,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=_session_action_keyboard(lang),
+            )
         elif update.message:
             await update.message.reply_text(
                 msg,
@@ -545,14 +553,18 @@ async def handle_disambiguate(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(
             _t("new_session_started", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=ReplyKeyboardRemove(),
+        )
+        await update.message.reply_text(
+            formatters.fmt_session_start_prompt(lang=lang),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=_session_action_keyboard(lang),
         )
     else:
         # Continue — re-prompt for photo type if there's a pending file
         await update.message.reply_text(
             _t("continuing_session", lang),
             parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=_session_action_keyboard(lang),
         )
         if context.user_data.get("pending_file_id"):
             await update.message.reply_text(
