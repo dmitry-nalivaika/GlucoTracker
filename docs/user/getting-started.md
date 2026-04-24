@@ -22,6 +22,15 @@ Send `/start` (or just start a new conversation).
 
 A session groups everything related to one meal event: food photos, CGM screenshots, and activity notes.
 
+The bot attaches a **session keyboard** to its reply with four buttons always visible at the bottom of your keyboard:
+
+```
+[ /done ]  [ /cancel ]  [ /status ]
+            [ /settings ]
+```
+
+You can tap any of these without typing the command.
+
 ### 2. Log a food photo
 
 Take a photo of your meal and send it to the bot.
@@ -34,13 +43,18 @@ You can send multiple food photos for the same meal.
 
 Take a screenshot of your CGM app (Dexcom, Libre, etc.) and send it.
 
-The bot will ask you to choose the timing:
-- **Fasting** — before eating
-- **30 min after meal**
-- **1 hour after meal**
-- **2 hours after meal**
+The bot immediately shows a single-tap classification keyboard with all options at once:
 
-Select the option that matches when the reading was taken.
+| Button | Meaning |
+|---|---|
+| 🍽️ Food photo | Reclassify as food (if you sent the wrong image) |
+| 📈 CGM · before | Reading taken before eating |
+| 📈 CGM · right after | Reading taken right after the meal |
+| 📈 CGM · 1h after | Reading taken ~1 hour after the meal |
+| 📈 CGM · 2h after | Reading taken ~2 hours after the meal |
+| 🤷 Not sure | Save without a timing label |
+
+Tap the option that matches when the reading was taken — no second step needed.
 
 > **Bot:** "CGM screenshot saved ✓ (1 food · 1 CGM · 0 activity)"
 
@@ -89,6 +103,16 @@ How the meal likely drove your glucose response — spikes, dips, and stable zon
 | `/status` | Show current session entry counts |
 | `/cancel` | Cancel the current session without analysis |
 | `/trend` | See how many analysed sessions you have (trend analysis coming soon) |
+| `/settings` | Change bot language (English / Русский) |
+
+### Changing the language
+
+Send `/settings` (or tap the `/settings` button in the session keyboard) to open the language picker:
+
+- 🇺🇸 **English** — switches the bot to English
+- 🇷🇺 **Русский** — переключает бота на русский
+
+The choice is saved to your profile and used for all future messages, including analysis results.
 
 ---
 
